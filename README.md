@@ -1,1 +1,1 @@
-# server
+# revista-cu

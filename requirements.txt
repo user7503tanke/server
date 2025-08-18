@@ -1,0 +1,8 @@
+flask
+flask-HTTPAuth
+werkzeug
+requests
+bs4
+pyrogram
+pytz
+gunicorn
