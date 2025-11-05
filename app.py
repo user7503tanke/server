@@ -33,7 +33,6 @@ cuba_timezone = pytz.timezone('America/Havana')
 # Users
 users = {
     "admin": generate_password_hash("lamermanosevende2.0"),
-    "Carlos": generate_password_hash("carlos334087"),
     "Nathan": generate_password_hash("123nathan")
 }
 
@@ -78,6 +77,8 @@ def auto_visits():
             ]
             
             for endpoint in endpoints:
+                tiempo_espera = random.randint(30, 120)
+                time.sleep(tiempo_espera)
                 try:
                     response = requests.get(f"{base_url}{endpoint}", timeout=10)
                     cuba_time = datetime.now(cuba_timezone)
@@ -94,11 +95,14 @@ def auto_visits():
                #     log_access("AutoVisit", endpoint, f"Error: {e}")
             
             # Esperar 30 segundos antes de la siguiente ronda de visitas
-            time.sleep(30)
+            tiempo_espera = random.randint(30, 120)
+            time.sleep(tiempo_espera)
             
         except Exception as e:
             print(f"Error en auto_visits: {e}")
-            time.sleep(30)  # Esperar 30 segundos incluso si hay error
+            tiempo_espera = random.randint(30, 120)
+            time.sleep(tiempo_espera)
+             # Esperar 30 segundos incluso si hay error
 
 # Iniciar el hilo de visitas automáticas cuando el servidor comience
 def start_auto_visits():
