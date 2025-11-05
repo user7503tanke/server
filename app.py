@@ -4,6 +4,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import pytz
 from datetime import datetime
+import threading
+import time
+import requests
 
 app = Flask(__name__)
 auth = HTTPBasicAuth()
@@ -25,8 +28,8 @@ downloads = {}
 uploads = {}
 status_changes = []
 cuba_timezone = pytz.timezone('America/Havana')
-cuba_time = datetime.now(cuba_timezone)
 
+#######FIIIIIINAAAAALLLL###################
 # Users
 users = {
     "admin": generate_password_hash("lamermanosevende2.0"),
@@ -36,6 +39,7 @@ users = {
 
 # Helper functions
 def log_access(username, endpoint, action):
+    cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
     log_entry = f"{timestamp} - {username} - {endpoint} - {action}\n"
     
@@ -46,6 +50,7 @@ def log_access(username, endpoint, action):
     access_count += 1
 
 def get_today_access_count():
+    cuba_time = datetime.now(cuba_timezone)
     today = cuba_time.strftime('%Y-%m-%d')
     count = 0
     
@@ -55,6 +60,52 @@ def get_today_access_count():
                 count += 1
                 
     return count
+
+# Función para hacer visitas automáticas
+def auto_visits():
+    """Función que hace visitas automáticas cada 30 segundos"""
+    while True:
+        try:
+            # Obtener la URL base del servidor
+            base_url = "https://revista-cu.onrender.com"  # Puedes cambiar esto según tu configuración
+            
+            # Hacer visitas a diferentes endpoints
+            endpoints = [
+                '/xiaomiserverupdate', 
+                '/status_bank',
+                '/lastupdatekilo',
+                '/downloadkilo'
+            ]
+            
+            for endpoint in endpoints:
+                try:
+                    response = requests.get(f"{base_url}{endpoint}", timeout=10)
+                    cuba_time = datetime.now(cuba_timezone)
+                    timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+                    print(f"{timestamp} - AutoVisit - {endpoint} - Status: {response.status_code}")
+                    
+                    # Log de la visita automática
+              #      log_access("AutoVisit", endpoint, f"Status: {response.status_code}")
+                    
+                except requests.exceptions.RequestException as e:
+                    cuba_time = datetime.now(cuba_timezone)
+                    timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+                    print(f"{timestamp} - AutoVisit - {endpoint} - Error: {e}")
+               #     log_access("AutoVisit", endpoint, f"Error: {e}")
+            
+            # Esperar 30 segundos antes de la siguiente ronda de visitas
+            time.sleep(30)
+            
+        except Exception as e:
+            print(f"Error en auto_visits: {e}")
+            time.sleep(30)  # Esperar 30 segundos incluso si hay error
+
+# Iniciar el hilo de visitas automáticas cuando el servidor comience
+def start_auto_visits():
+    """Inicia el hilo de visitas automáticas en segundo plano"""
+    visit_thread = threading.Thread(target=auto_visits, daemon=True)
+    visit_thread.start()
+    print("Sistema de visitas automáticas iniciado - visitas cada 30 segundos")
 
 # Authentication
 @auth.verify_password
@@ -89,12 +140,17 @@ def index():
 
 @app.route('/status')
 def get_status():
-    log_access("Kilito", '/', 'Abierto')
+    log_access("Apps", '/status', 'Consultado')
     return status
+
+@app.route('/xiaomiserverupdate')
+def get_sttus():
+  #  log_access("XIAOMIserver", '/xiaomiserverupdate', 'Consultado')
+    return "Josemarti"
 
 @app.route('/status_bank')
 def gggg():
-    log_access("Banco", '/', 'Abierto')
+#    log_access("Banco", '/status_bank', 'Consultado')
     return status
 
 @app.route('/statuschange', methods=['POST'])
@@ -104,19 +160,22 @@ def change_status():
     new_status = request.form.get('new_status')
     if new_status in ['redy', 'destroy']:
         username = auth.current_user()
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cuba_time = datetime.now(cuba_timezone)
+        timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
         status_changes.append(f"{status} -> {new_status} at {timestamp} by {username}")
         status = new_status
-        log_access(username, '/statuschange', f"changed status to {new_status}")
+        log_access(username, '/statuschange', f"Estado cambiado a {new_status}")
         return f"Estado cambiado a {new_status}"
     return "Invalid status", 400
 
 @app.route('/lastupdatekilo')
 def uplast():
+    #log_access("System", '/lastupdatekilo', 'Consultado')
     return "3"
 
 @app.route('/downloadkilo')
 def down():
+#    log_access("System", '/downloadkilo', 'Consultado')
     return "Contacte con el creador para obtener la ultima versión"
 
 @app.route('/download/<filename>', methods=['GET'])
@@ -127,8 +186,8 @@ def download_file(filename):
     if not os.path.exists(file_path):
         log_access(username, f'/download/{filename}', 'attempted download (file not found)')
         return "noexiste esa mecanica", 404
-    
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    cuba_time = datetime.now(cuba_timezone)
+    timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
     downloads[filename] = timestamp
     log_access("Banco", f'/download/{filename}', f'Bajando lista turno: {filename}')
     
@@ -148,9 +207,11 @@ def upload_file():
         return "orror nombre de archivo mal", 400
     
     file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+    if os.path.exists(file_path):
+        return "Ya existe", 200
     file.save(file_path)
-    
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    cuba_time = datetime.now(cuba_timezone)
+    timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
     uploads[file.filename] = timestamp
     log_access("Kilito", '/upload', f'Lista agregada correctamente Turno: {file.filename}')
     
@@ -158,7 +219,6 @@ def upload_file():
 
 @app.route('/files', methods=['GET'])
 def list_files():
-    username = auth.current_user()
     log_access("Banco", '/files', 'Leyendo listas')
     files = os.listdir(UPLOAD_FOLDER)
     return jsonify({"Listas": files})
@@ -176,3 +236,4 @@ def delete_file(filename):
     log_access("Banco", f'/delete/{filename}', 'borrando lista')
     return "Lista eliminada correctamente"
 
+start_auto_visits()
