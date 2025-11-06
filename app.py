@@ -6,6 +6,7 @@ import pytz
 from datetime import datetime
 import threading
 import time
+import random
 import requests
 
 app = Flask(__name__)
@@ -33,7 +34,8 @@ cuba_timezone = pytz.timezone('America/Havana')
 # Users
 users = {
     "admin": generate_password_hash("lamermanosevende2.0"),
-    "Nathan": generate_password_hash("123nathan")
+    "Nathan": generate_password_hash("123nathan"),
+    "alex": generate_password_hash("alex.ma780503")
 }
 
 # Helper functions
