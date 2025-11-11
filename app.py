@@ -119,7 +119,7 @@ def auto_visits():
     while True:
         try:
             # Obtener la URL base del servidor
-            base_url = "https://revista-cu.onrender.com"  # Puedes cambiar esto según tu configuración
+            base_url = "https://server-dbi6.onrender.com/"  # Puedes cambiar esto según tu configuración
             
             # Hacer visitas a diferentes endpoints
             endpoints = [
