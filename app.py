@@ -31,6 +31,10 @@ uploads = {}
 status_changes = []
 cuba_timezone = pytz.timezone('America/Havana')
 
+# Telegram Bot Configuration
+TELEGRAM_BOT_TOKEN = "8075772181:AAFThdLwDvAHG0I0VN6wG78rdFVJNVinEzE"  # Reemplaza con tu token del bot
+TELEGRAM_CHAT_ID = "7587515668"      # Reemplaza con tu chat ID
+
 #######FIIIIIINAAAAALLLL###################
 # Users
 users = {
@@ -40,6 +44,21 @@ users = {
 }
 
 # Helper functions
+def send_telegram_message(message):
+    """Envía un mensaje a través del bot de Telegram"""
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message,
+            "parse_mode": "HTML"
+        }
+        response = requests.post(url, json=payload, timeout=10)
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Error enviando mensaje a Telegram: {e}")
+        return False
+
 def log_access(username, endpoint, action):
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
@@ -50,6 +69,11 @@ def log_access(username, endpoint, action):
     
     global access_count
     access_count += 1
+    
+    # Enviar notificación a Telegram para acciones importantes
+    if endpoint in ['/upload', '/download/', '/statuschange', '/delete/']:
+        telegram_message = f"🔔 <b>Nueva acción detectada</b>\n\n👤 Usuario: {username}\n🌐 Endpoint: {endpoint}\n📝 Acción: {action}\n🕐 Hora: {timestamp}"
+        send_telegram_message(telegram_message)
 
 def get_today_access_count():
     cuba_time = datetime.now(cuba_timezone)
@@ -114,7 +138,6 @@ def validate_filename(filename):
     except Exception as e:
         return False, f"Error validando nombre: {str(e)}"
         
-        
 # Función para hacer visitas automáticas
 def auto_visits():
     """Función que hace visitas automáticas con intervalos aleatorios"""
@@ -138,14 +161,10 @@ def auto_visits():
                     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
                     print(f"{timestamp} - AutoVisit - {endpoint} - Status: {response.status_code}")
                     
-                    # Log de la visita automática
-              #      log_access("AutoVisit", endpoint, f"Status: {response.status_code}")
-                    
                 except requests.exceptions.RequestException as e:
                     cuba_time = datetime.now(cuba_timezone)
                     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
                     print(f"{timestamp} - AutoVisit - {endpoint} - Error: {e}")
-               #     log_access("AutoVisit", endpoint, f"Error: {e}")
             
             # Esperar un tiempo aleatorio entre 20 y 40 segundos
             wait_time = random.randint(20, 40)
@@ -211,18 +230,23 @@ def openturn():
     try:
         listero_value = request.get_data(as_text=True)
         log_access("Abriendo turno "+listero_value, '/openturn', 'bien')
+        
+        # Notificación especial para apertura de turno
+        cuba_time = datetime.now(cuba_timezone)
+        timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+        telegram_message = f"🔄 <b>Turno Abierto</b>\n\n📋 Lista: {listero_value}\n🕐 Hora: {timestamp}"
+        send_telegram_message(telegram_message)
+        
         return status, 200
     except Exception as e:
         return "destroy", 500
 
 @app.route('/xiaomiserverupdate')
 def get_sttus():
-  #  log_access("XIAOMIserver", '/xiaomiserverupdate', 'Consultado')
     return "Josemarti"
 
 @app.route('/status_bank')
 def gggg():
-#    log_access("Banco", '/status_bank', 'Consultado')
     return status
 
 @app.route('/statuschange', methods=['POST'])
@@ -235,6 +259,12 @@ def change_status():
         cuba_time = datetime.now(cuba_timezone)
         timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
         status_changes.append(f"{status} -> {new_status} at {timestamp} by {username}")
+        
+        # Notificación de cambio de estado
+        status_emoji = "✅" if new_status == 'redy' else "❌"
+        telegram_message = f"{status_emoji} <b>Cambio de Estado del Sistema</b>\n\n👤 Usuario: {username}\n🔄 Estado anterior: {status}\n🆕 Estado nuevo: {new_status}\n🕐 Hora: {timestamp}"
+        send_telegram_message(telegram_message)
+        
         status = new_status
         log_access(username, '/statuschange', f"Estado cambiado a {new_status}")
         return f"Estado cambiado a {new_status}"
@@ -242,12 +272,10 @@ def change_status():
 
 @app.route('/lastupdatekilo')
 def uplast():
-    #log_access("System", '/lastupdatekilo', 'Consultado')
     return "3"
 
 @app.route('/downloadkilo')
 def down():
-#    log_access("System", '/downloadkilo', 'Consultado')
     return "Contacte con el creador para obtener la ultima versión"
 
 @app.route('/download/<filename>', methods=['GET'])
@@ -261,6 +289,11 @@ def download_file(filename):
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
     downloads[filename] = timestamp
+    
+    # Notificación de descarga
+    telegram_message = f"📥 <b>Lista Descargada</b>\n\n👤 Usuario: {username}\n📄 Archivo: {filename}\n🕐 Hora: {timestamp}"
+    send_telegram_message(telegram_message)
+    
     log_access("Banco", f'/download/{filename}', f'Bajando lista turno: {filename}')
     
     return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=True)
@@ -291,6 +324,11 @@ def upload_file():
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
     uploads[file.filename] = timestamp
+    
+    # Notificación de subida exitosa
+    telegram_message = f"📤 <b>Lista Subida Exitosamente</b>\n\n👤 Usuario: {username}\n📄 Archivo: {file.filename}\n🕐 Hora: {timestamp}"
+    send_telegram_message(telegram_message)
+    
     log_access("Kilito", '/upload', f'Lista agregada correctamente Turno: {file.filename}')
     
     return "Lista agregada correctamente Turno: "+file.filename,200
@@ -311,7 +349,27 @@ def delete_file(filename):
         return "Lista no encontrada", 404
     
     os.remove(file_path)
+    
+    # Notificación de eliminación
+    cuba_time = datetime.now(cuba_timezone)
+    timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+    telegram_message = f"🗑️ <b>Lista Eliminada</b>\n\n👤 Usuario: {username}\n📄 Archivo: {filename}\n🕐 Hora: {timestamp}"
+    send_telegram_message(telegram_message)
+    
     log_access("Banco", f'/delete/{filename}', 'borrando lista')
     return "Lista eliminada correctamente"
+
+# Enviar mensaje de inicio del servidor
+def send_startup_message():
+    """Envía un mensaje cuando el servidor se inicia"""
+    time.sleep(5)  # Esperar a que el servidor esté completamente listo
+    cuba_time = datetime.now(cuba_timezone)
+    timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+    startup_message = f"🚀 <b>Servidor Iniciado</b>\n\n🕐 Hora de inicio: {timestamp}\n📍 Timezone: America/Havana\n✅ Estado: Listo para recibir conexiones"
+    send_telegram_message(startup_message)
+
+# Iniciar el hilo para el mensaje de inicio
+startup_thread = threading.Thread(target=send_startup_message, daemon=True)
+startup_thread.start()
 
 start_auto_visits()
