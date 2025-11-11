@@ -6,8 +6,9 @@ import pytz
 from datetime import datetime
 import threading
 import time
-import random
 import requests
+import random
+import re
 
 app = Flask(__name__)
 auth = HTTPBasicAuth()
@@ -34,8 +35,8 @@ cuba_timezone = pytz.timezone('America/Havana')
 # Users
 users = {
     "admin": generate_password_hash("lamermanosevende2.0"),
-    "Nathan": generate_password_hash("123nathan"),
-    "alex": generate_password_hash("alex.ma780503")
+    "Carlos": generate_password_hash("carlos334087"),
+    "Nathan": generate_password_hash("123nathan")
 }
 
 # Helper functions
@@ -62,9 +63,59 @@ def get_today_access_count():
                 
     return count
 
+def validate_filename(filename):
+    """
+    Valida que el nombre del archivo siga el formato: a-YYYY-MM-DD-Turno
+    y que cumpla con los horarios establecidos para cada turno.
+    """
+    # Verificar el patrón del nombre
+    pattern = r'^a-\d{4}-\d{2}-\d{2}-(Dia|Noche)$'
+    if not re.match(pattern, filename):
+        return False, "Formato de nombre inválido. Debe ser: a-YYYY-MM-DD-Turno"
+    
+    # Extraer componentes
+    try:
+        parts = filename.split('-')
+        year = int(parts[1])
+        month = int(parts[2])
+        day = int(parts[3])
+        turno = parts[4]
+        
+        # Verificar que la fecha sea válida
+        file_date = datetime(year, month, day)
+        
+        # Obtener fecha y hora actual en Cuba
+        cuba_now = datetime.now(cuba_timezone)
+        current_date = cuba_now.date()
+        current_time = cuba_now.time()
+        
+        # Verificar que la fecha del archivo sea hoy
+        if file_date.date() != current_date:
+            return False, "Solo se pueden subir listas del día actual"
+        
+        # Verificar horarios según el turno
+        if turno == "Dia":
+            # Para turno Dia: antes de 1:30 PM (13:30)
+            limite_dia = datetime.strptime("13:30", "%H:%M").time()
+            if current_time > limite_dia:
+                return False, "El turno Dia solo se puede subir antes de las 1:29 PM, esta lista la banquea usted."
+        
+        elif turno == "Noche":
+            # Para turno Noche: antes de 9:44 PM (21:44)
+            limite_noche = datetime.strptime("21:44", "%H:%M").time()
+            if current_time > limite_noche:
+                return False, "El turno Noche solo se puede subir antes de las 9:44 PM, esta lista la banquea usted."
+        
+        return True, "Válido"
+        
+    except ValueError as e:
+        return False, f"Fecha inválida: {str(e)}"
+    except Exception as e:
+        return False, f"Error validando nombre: {str(e)}"
+
 # Función para hacer visitas automáticas
 def auto_visits():
-    """Función que hace visitas automáticas cada 30 segundos"""
+    """Función que hace visitas automáticas con intervalos aleatorios"""
     while True:
         try:
             # Obtener la URL base del servidor
@@ -79,8 +130,6 @@ def auto_visits():
             ]
             
             for endpoint in endpoints:
-                tiempo_espera = random.randint(30, 120)
-                time.sleep(tiempo_espera)
                 try:
                     response = requests.get(f"{base_url}{endpoint}", timeout=10)
                     cuba_time = datetime.now(cuba_timezone)
@@ -96,22 +145,22 @@ def auto_visits():
                     print(f"{timestamp} - AutoVisit - {endpoint} - Error: {e}")
                #     log_access("AutoVisit", endpoint, f"Error: {e}")
             
-            # Esperar 30 segundos antes de la siguiente ronda de visitas
-            tiempo_espera = random.randint(30, 120)
-            time.sleep(tiempo_espera)
+            # Esperar un tiempo aleatorio entre 20 y 40 segundos
+            wait_time = random.randint(20, 40)
+            time.sleep(wait_time)
             
         except Exception as e:
             print(f"Error en auto_visits: {e}")
-            tiempo_espera = random.randint(30, 120)
-            time.sleep(tiempo_espera)
-             # Esperar 30 segundos incluso si hay error
+            # En caso de error, esperar un tiempo aleatorio también
+            wait_time = random.randint(20, 40)
+            time.sleep(wait_time)
 
 # Iniciar el hilo de visitas automáticas cuando el servidor comience
 def start_auto_visits():
     """Inicia el hilo de visitas automáticas en segundo plano"""
     visit_thread = threading.Thread(target=auto_visits, daemon=True)
     visit_thread.start()
-    print("Sistema de visitas automáticas iniciado - visitas cada 30 segundos")
+    print("Sistema de visitas automáticas iniciado - visitas cada 20-40 segundos (aleatorio)")
 
 # Authentication
 @auth.verify_password
@@ -148,6 +197,21 @@ def index():
 def get_status():
     log_access("Apps", '/status', 'Consultado')
     return status
+
+@app.route('/hora')
+def get_stkffkatus():
+    cuba_time = datetime.now(cuba_timezone)
+    time = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+    return time
+
+@app.route('/openturn', methods=['GET', 'POST'])
+def openturn():
+    try:
+        listero_value = request.get_data(as_text=True)
+        log_access("Abriendo turno "+listero_value, '/openturn', 'bien')
+        return status, 200
+    except Exception as e:
+        return "destroy", 500
 
 @app.route('/xiaomiserverupdate')
 def get_sttus():
@@ -212,16 +276,22 @@ def upload_file():
         log_access(username, '/upload', 'attempted upload (empty filename)')
         return "orror nombre de archivo mal", 400
     
+    # Validar el nombre del archivo
     file_path = os.path.join(UPLOAD_FOLDER, file.filename)
     if os.path.exists(file_path):
-        return "Ya existe", 200
+        return "La lista Ya esta en el servidor", 201
+    is_valid, message = validate_filename(file.filename)
+    if not is_valid:
+        log_access(username, '/upload', f'attempted upload (invalid filename: {message})')
+        return f"Error: {message}", 205
+    
     file.save(file_path)
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
     uploads[file.filename] = timestamp
     log_access("Kilito", '/upload', f'Lista agregada correctamente Turno: {file.filename}')
     
-    return "Lista agregada correctamente Turno: "+file.filename
+    return "Lista agregada correctamente Turno: "+file.filename,200
 
 @app.route('/files', methods=['GET'])
 def list_files():
