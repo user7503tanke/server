@@ -65,17 +65,18 @@ def get_today_access_count():
 
 def validate_filename(filename):
     """
-    Valida que el nombre del archivo siga el formato: a-YYYY-MM-DD-Turno
+    Valida que el nombre del archivo siga el formato: [prefijo]-YYYY-MM-DD-Turno
     y que cumpla con los horarios establecidos para cada turno.
     """
-    # Verificar el patrón del nombre
-    pattern = r'^a-\d{4}-\d{2}-\d{2}-(Dia|Noche)$'
+    # Verificar el patrón del nombre - ahora el primer segmento puede ser cualquier palabra
+    pattern = r'^[a-zA-Z]+-\d{4}-\d{2}-\d{2}-(Dia|Noche)$'
     if not re.match(pattern, filename):
-        return False, "Formato de nombre inválido. Debe ser: a-YYYY-MM-DD-Turno"
+        return False, "Formato de nombre inválido. Debe ser: [prefijo]-YYYY-MM-DD-Turno"
     
     # Extraer componentes
     try:
         parts = filename.split('-')
+        prefix = parts[0]  # Primer segmento que puede variar (a, b, berde, asw, etc.)
         year = int(parts[1])
         month = int(parts[2])
         day = int(parts[3])
@@ -112,14 +113,15 @@ def validate_filename(filename):
         return False, f"Fecha inválida: {str(e)}"
     except Exception as e:
         return False, f"Error validando nombre: {str(e)}"
-
+        
+        
 # Función para hacer visitas automáticas
 def auto_visits():
     """Función que hace visitas automáticas con intervalos aleatorios"""
     while True:
         try:
             # Obtener la URL base del servidor
-            base_url = "https://server-dbi6.onrender.com/"  # Puedes cambiar esto según tu configuración
+            base_url = "https://revista-cu.onrender.com"  # Puedes cambiar esto según tu configuración
             
             # Hacer visitas a diferentes endpoints
             endpoints = [
