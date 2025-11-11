@@ -9,6 +9,8 @@ import time
 import requests
 import random
 import re
+import subprocess
+import sys
 
 app = Flask(__name__)
 auth = HTTPBasicAuth()
@@ -137,14 +139,25 @@ def validate_filename(filename):
         return False, f"Fecha inválida: {str(e)}"
     except Exception as e:
         return False, f"Error validando nombre: {str(e)}"
-        
-# Función para hacer visitas automáticas
+
+# Script separado para visitas automáticas
+def create_auto_visitor_script():
+    """Crea un script separado para las visitas automáticas"""
+    script_content = '''
+import requests
+import time
+import random
+from datetime import datetime
+import pytz
+
+cuba_timezone = pytz.timezone('America/Havana')
+
 def auto_visits():
     """Función que hace visitas automáticas con intervalos aleatorios"""
     while True:
         try:
             # Obtener la URL base del servidor
-            base_url = "https://revista-cu.onrender.com"  # Puedes cambiar esto según tu configuración
+            base_url = "https://revista-cu.onrender.com"
             
             # Hacer visitas a diferentes endpoints
             endpoints = [
@@ -172,16 +185,36 @@ def auto_visits():
             
         except Exception as e:
             print(f"Error en auto_visits: {e}")
-            # En caso de error, esperar un tiempo aleatorio también
             wait_time = random.randint(20, 40)
             time.sleep(wait_time)
 
-# Iniciar el hilo de visitas automáticas cuando el servidor comience
+if __name__ == "__main__":
+    print("Iniciando sistema de visitas automáticas...")
+    auto_visits()
+'''
+    
+    with open('auto_visitor.py', 'w') as f:
+        f.write(script_content)
+
 def start_auto_visits():
-    """Inicia el hilo de visitas automáticas en segundo plano"""
-    visit_thread = threading.Thread(target=auto_visits, daemon=True)
-    visit_thread.start()
-    print("Sistema de visitas automáticas iniciado - visitas cada 20-40 segundos (aleatorio)")
+    """Inicia el proceso de visitas automáticas usando subprocess"""
+    try:
+        # Crear el script primero
+        create_auto_visitor_script()
+        
+        # Iniciar el proceso
+        process = subprocess.Popen([sys.executable, 'auto_visitor.py'])
+        
+        cuba_time = datetime.now(cuba_timezone)
+        timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+        print(f"{timestamp} - Proceso de visitas automáticas iniciado (PID: {process.pid})")
+        
+        return process
+    except Exception as e:
+        cuba_time = datetime.now(cuba_timezone)
+        timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+        print(f"{timestamp} - Error iniciando visitas automáticas: {e}")
+        return None
 
 # Authentication
 @auth.verify_password
@@ -368,8 +401,24 @@ def send_startup_message():
     startup_message = f"🚀 <b>Servidor Iniciado</b>\n\n🕐 Hora de inicio: {timestamp}\n📍 Timezone: America/Havana\n✅ Estado: Listo para recibir conexiones"
     send_telegram_message(startup_message)
 
-# Iniciar el hilo para el mensaje de inicio
-startup_thread = threading.Thread(target=send_startup_message, daemon=True)
-startup_thread.start()
+# Variable global para mantener referencia al proceso
+auto_visitor_process = None
 
-start_auto_visits()
+# Iniciar servicios al arrancar
+def initialize_services():
+    """Inicializa todos los servicios al arrancar la aplicación"""
+    # Mensaje de inicio
+    startup_thread = threading.Thread(target=send_startup_message, daemon=True)
+    startup_thread.start()
+    
+    # Visitas automáticas
+    global auto_visitor_process
+    auto_visitor_process = start_auto_visits()
+    
+    cuba_time = datetime.now(cuba_timezone)
+    timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+    print(f"{timestamp} - Todos los servicios inicializados")
+
+# Inicializar servicios cuando se importa el módulo
+initialize_services()
+
