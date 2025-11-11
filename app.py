@@ -173,14 +173,16 @@ def auto_visits():
                     cuba_time = datetime.now(cuba_timezone)
                     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
                     print(f"{timestamp} - AutoVisit - {endpoint} - Status: {response.status_code}")
+                    wait_time = random.randint(60, 120)
+                    time.sleep(wait_time)
                     
                 except requests.exceptions.RequestException as e:
                     cuba_time = datetime.now(cuba_timezone)
                     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
                     print(f"{timestamp} - AutoVisit - {endpoint} - Error: {e}")
             
-            # Esperar un tiempo aleatorio entre 20 y 40 segundos
-            wait_time = random.randint(20, 40)
+            # Esperar un tiempo aleatorio entre 120 y 60 segundos
+            wait_time = random.randint(60, 120)
             time.sleep(wait_time)
             
         except Exception as e:
