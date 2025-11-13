@@ -95,7 +95,7 @@ def validate_filename(filename):
     y que cumpla con los horarios establecidos para cada turno.
     """
     # Verificar el patrón del nombre - ahora el primer segmento puede ser cualquier palabra
-    texto = texto.replace(" ","")
+    filename = filename.replace(" ","")
     pattern = r'^[a-zA-Z]+-\d{4}-\d{1,2}-\d{1,2}-(Dia|Noche|DIA|NOCHE|dia|noche)$'
     if not re.match(pattern, filename):
         return False, "Formato de nombre inválido. Debe ser: [apodo]-YYYY-MM-DD-Turno el tuyo es"+filename
