@@ -97,7 +97,7 @@ def validate_filename(filename):
     # Verificar el patrón del nombre - ahora el primer segmento puede ser cualquier palabra
     pattern = r'^[a-zA-Z]+-\d{4}-\d{2}-\d{2}-(Dia|Noche)$'
     if not re.match(pattern, filename):
-        return False, "Formato de nombre inválido. Debe ser: [prefijo]-YYYY-MM-DD-Turno"
+        return False, "Formato de nombre inválido. Debe ser: [apodo]-YYYY-MM-DD-Turno el tuyo es"+filename
     
     # Extraer componentes
     try:
