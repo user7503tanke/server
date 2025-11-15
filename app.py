@@ -349,13 +349,12 @@ def upload_file():
     
     # Validar el nombre del archivo
     file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    if os.path.exists(file_path):
-        return "La lista Ya esta en el servidor", 201
     is_valid, message = validate_filename(file.filename)
     if not is_valid:
         log_access(username, '/upload', f'attempted upload (invalid filename: {message})')
         return f"Error: {message}", 205
-    
+    if os.path.exists(file_path):
+        os.remove(file_path)
     file.save(file_path)
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
