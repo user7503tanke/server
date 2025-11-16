@@ -41,7 +41,6 @@ TELEGRAM_CHAT_ID = "7587515668"      # Reemplaza con tu chat ID
 # Users
 users = {
     "admin": generate_password_hash("lamermanosevende2.0"),
-    "Carlos": generate_password_hash("carlos334087"),
     "Nathan": generate_password_hash("123nathan")
 }
 
@@ -348,9 +347,10 @@ def upload_file():
         return "orror nombre de archivo mal", 400
     
     # Validar el nombre del archivo
+    filename = file.filename
     filename = filename.replace("controlantimermaxd","")
-    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    is_valid, message = validate_filename(file.filename)
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    is_valid, message = validate_filename(filename)
     if not is_valid:
         log_access(username, '/upload', f'attempted upload (invalid filename: {message})')
         return f"Error: {message}", 205
