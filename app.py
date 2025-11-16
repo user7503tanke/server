@@ -96,7 +96,6 @@ def validate_filename(filename):
     """
     # Verificar el patrón del nombre - ahora el primer segmento puede ser cualquier palabra
     filename = filename.replace(" ","")
-    filename = filename.replace("controlantimermaxd","")
     pattern = r'^[a-zA-Z]+-\d{4}-\d{1,2}-\d{1,2}-(Dia|Noche|DIA|NOCHE|dia|noche)$'
     if not re.match(pattern, filename):
         return False, "Formato de nombre inválido. Debe ser: [apodo]-YYYY-MM-DD-Turno el tuyo es"+filename
@@ -349,6 +348,7 @@ def upload_file():
         return "orror nombre de archivo mal", 400
     
     # Validar el nombre del archivo
+    filename = filename.replace("controlantimermaxd","")
     file_path = os.path.join(UPLOAD_FOLDER, file.filename)
     is_valid, message = validate_filename(file.filename)
     if not is_valid:
