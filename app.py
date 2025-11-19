@@ -118,20 +118,20 @@ def validate_filename(filename):
         
         # Verificar que la fecha del archivo sea hoy
         if file_date.date() != current_date:
-            return False, "Solo se pueden subir listas del día actual"
+            return False, "Solo se pueden subir listas del día actual "+filename
         
         # Verificar horarios según el turno
         if turno == "Dia":
             # Para turno Dia: antes de 1:30 PM (13:30)
             limite_dia = datetime.strptime("13:30", "%H:%M").time()
             if current_time > limite_dia:
-                return False, "El turno Dia solo se puede subir antes de las 1:29 PM, esta lista la banquea usted."
+                return False, "El turno Dia solo se puede subir antes de las 1:29 PM, esta lista la banquea usted. "+filename
         
         elif turno == "Noche":
             # Para turno Noche: antes de 9:44 PM (21:44)
             limite_noche = datetime.strptime("21:44", "%H:%M").time()
             if current_time > limite_noche:
-                return False, "El turno Noche solo se puede subir antes de las 9:44 PM, esta lista la banquea usted."
+                return False, "El turno Noche solo se puede subir antes de las 9:44 PM, esta lista la banquea usted. "+filename
         
         return True, "Válido"
         
@@ -307,11 +307,15 @@ def change_status():
 
 @app.route('/lastupdatekilo')
 def uplast():
-    return "vdataantiloqueraV2.7"
+    return "vdataantiloqueraV2.8"
 
 @app.route('/downloadkilo')
 def down():
     return "Contacte con el creador para obtener la ultima versión"
+
+@app.route('/update')
+def down():
+    return "Contacte con el recolector para obtener la ultima versión"
 
 @app.route('/download/<filename>', methods=['GET'])
 @auth.login_required
@@ -365,9 +369,9 @@ def upload_file():
     telegram_message = f"📤 <b>Lista Subida Exitosamente</b>\n\n👤 Usuario: {username}\n📄 Archivo: {file.filename}\n🕐 Hora: {timestamp}"
     send_telegram_message(telegram_message)
     
-    log_access("Kilito", '/upload', f'Lista agregada correctamente Turno: {file.filename}')
+    log_access("Kilito", '/upload', f'Lista agregada correctamente Turno: {filename}')
     
-    return "Lista agregada correctamente Turno: "+file.filename,200
+    return "Lista agregada correctamente Turno: "+filename,200
 
 @app.route('/files', methods=['GET'])
 def list_files():
