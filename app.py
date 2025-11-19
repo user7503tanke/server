@@ -314,7 +314,7 @@ def down():
     return "Contacte con el creador para obtener la ultima versión"
 
 @app.route('/update')
-def down():
+def doggggwn():
     return "Contacte con el recolector para obtener la ultima versión"
 
 @app.route('/download/<filename>', methods=['GET'])
