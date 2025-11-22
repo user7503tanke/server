@@ -78,6 +78,86 @@ def send_telegram_document(file_path, filename, caption=""):
         print(f"Error enviando documento a Telegram: {e}")
         return False
 
+def get_telegram_messages(limit=100):
+    """Obtiene los mensajes recientes del chat de Telegram"""
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('ok'):
+                return data.get('result', [])
+        return []
+    except Exception as e:
+        print(f"Error obteniendo mensajes de Telegram: {e}")
+        return []
+
+def download_telegram_file(file_id, filename):
+    """Descarga un archivo de Telegram"""
+    try:
+        # Obtener información del archivo
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getFile"
+        response = requests.post(url, json={'file_id': file_id}, timeout=10)
+        if response.status_code == 200:
+            file_info = response.json()
+            if file_info.get('ok'):
+                file_path = file_info['result']['file_path']
+                
+                # Descargar el archivo
+                download_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_path}"
+                file_response = requests.get(download_url, timeout=30)
+                
+                if file_response.status_code == 200:
+                    file_path_local = os.path.join(UPLOAD_FOLDER, filename)
+                    with open(file_path_local, 'wb') as f:
+                        f.write(file_response.content)
+                    return True
+        return False
+    except Exception as e:
+        print(f"Error descargando archivo de Telegram: {e}")
+        return False
+
+def restore_lists_from_telegram():
+    """Busca y restaura listas desde los mensajes de Telegram"""
+    try:
+        messages = get_telegram_messages(limit=100)
+        restored_count = 0
+        
+        for message in messages:
+            if 'message' in message and 'document' in message['message']:
+                document = message['message']['document']
+                file_name = document.get('file_name', '')
+                
+                # Verificar si es una lista válida
+                if is_valid_list_file(file_name):
+                    file_id = document['file_id']
+                    
+                    # Verificar si el archivo ya existe localmente
+                    local_path = os.path.join(UPLOAD_FOLDER, file_name)
+                    if not os.path.exists(local_path):
+                        # Descargar el archivo
+                        if download_telegram_file(file_id, file_name):
+                            # Actualizar metadatos
+                            cuba_time = datetime.now(cuba_timezone)
+                            timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+                            uploads[file_name] = f"Restaurado desde Telegram el {timestamp}"
+                            restored_count += 1
+                            print(f"✅ Lista restaurada desde Telegram: {file_name}")
+        
+        return restored_count
+    except Exception as e:
+        print(f"Error restaurando listas desde Telegram: {e}")
+        return 0
+
+def is_valid_list_file(filename):
+    """Verifica si el archivo tiene el formato de lista válido"""
+    try:
+        filename = filename.replace(" ", "")
+        pattern = r'^[a-zA-Z]+-\d{4}-\d{1,2}-\d{1,2}-(Dia|Noche|DIA|NOCHE|dia|noche)$'
+        return bool(re.match(pattern, filename))
+    except:
+        return False
+
 def send_telegram_backup(backup_data):
     """Envía un respaldo de datos a Telegram"""
     try:
@@ -124,7 +204,7 @@ def backup_all_files():
         
         for filename in files:
             file_path = os.path.join(UPLOAD_FOLDER, filename)
-            if os.path.isfile(file_path):
+            if os.path.isfile(file_path) and is_valid_list_file(filename):
                 cuba_time = datetime.now(cuba_timezone)
                 timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
                 caption = f"📁 RESPALDO: {filename}\n🕐 {timestamp}"
@@ -144,14 +224,8 @@ def backup_all_files():
         return 0
 
 def restore_files_from_backup():
-    """Restaura archivos desde los mensajes de Telegram (implementación básica)"""
-    # Esta función requeriría una implementación más compleja para leer desde Telegram
-    # Por ahora solo notificamos que se necesitaría una restauración manual
-    cuba_time = datetime.now(cuba_timezone)
-    timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
-    
-    telegram_message = f"🔄 <b>SE REQUIERE RESTAURACIÓN MANUAL</b>\n\n📋 Para restaurar archivos:\n1. Revisa los archivos en los mensajes de Telegram\n2. Descárgalos manualmente\n3. Súbelos al servidor\n🕐 Hora: {timestamp}"
-    send_telegram_message(telegram_message)
+    """Restaura archivos desde los mensajes de Telegram"""
+    return restore_lists_from_telegram()
 
 def restore_from_backup():
     """Restaura los datos desde el respaldo"""
@@ -163,13 +237,20 @@ def restore_from_backup():
         downloads = backup_data.get('downloads', {})
         status_changes = backup_data.get('status_changes', [])
         access_count = backup_data.get('access_count', 0)
-        print("✅ Datos restaurados desde el respaldo")
-        
+        print("✅ Datos restaurados desde el respaldo local")
+    
+    # Restaurar listas desde Telegram
+    restored_from_telegram = restore_lists_from_telegram()
+    
+    if restored_from_telegram > 0:
         # Notificar restauración
         cuba_time = datetime.now(cuba_timezone)
         timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
-        telegram_message = f"🔄 <b>Datos Restaurados desde Respaldo</b>\n\n📊 Listas subidas: {len(uploads)}\n📥 Listas descargadas: {len(downloads)}\n🕐 Hora: {timestamp}"
+        telegram_message = f"🔄 <b>Listas Restauradas desde Telegram</b>\n\n📊 Listas restauradas: {restored_from_telegram}\n📊 Listas en metadatos: {len(uploads)}\n🕐 Hora: {timestamp}"
         send_telegram_message(telegram_message)
+        
+        # Actualizar respaldo local con las nuevas listas
+        create_backup()
 
 def create_backup():
     """Crea un respaldo completo de los datos y archivos"""
@@ -195,7 +276,7 @@ def create_backup():
         'backup_timestamp': backup_data['backup_timestamp']
     })
     
-    # Respaldar archivos a Telegram
+    # Respaldar archivos a Telegram (solo si no están ya respaldados)
     backed_up_files = backup_all_files()
     
     # Notificar resultado del respaldo de archivos
@@ -502,31 +583,72 @@ def create_manual_backup():
 def restore_backup():
     """Endpoint para restaurar desde el respaldo"""
     username = auth.current_user()
-    restore_from_backup()
     
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
     
-    telegram_message = f"🔄 <b>Datos Restaurados</b>\n\n👤 Usuario: {username}\n📊 Listas restauradas: {len(uploads)}\n🕐 Hora: {timestamp}\n⚠️ <b>Los archivos deben restaurarse manualmente desde Telegram</b>"
-    send_telegram_message(telegram_message)
+    # Notificar inicio de restauración
+    start_message = f"🔄 <b>Iniciando Restauración desde Telegram</b>\n\n👤 Usuario: {username}\n🕐 Hora: {timestamp}"
+    send_telegram_message(start_message)
     
-    log_access(username, '/restore', 'Datos restaurados desde respaldo')
-    return "Datos restaurados exitosamente. Los archivos deben restaurarse manualmente desde Telegram.", 200
+    # Restaurar desde Telegram
+    restored_count = restore_lists_from_telegram()
+    
+    # Actualizar respaldo local
+    create_backup()
+    
+    # Notificar finalización
+    complete_message = f"✅ <b>Restauración Completada</b>\n\n👤 Usuario: {username}\n📊 Listas restauradas: {restored_count}\n📊 Total listas ahora: {len(uploads)}\n🕐 Hora: {timestamp}"
+    send_telegram_message(complete_message)
+    
+    log_access(username, '/restore', f'Restauradas {restored_count} listas desde Telegram')
+    return f"Restauración completada. {restored_count} listas restauradas desde Telegram.", 200
+
+@app.route('/check_telegram_lists', methods=['GET'])
+@auth.login_required
+def check_telegram_lists():
+    """Endpoint para verificar listas disponibles en Telegram"""
+    username = auth.current_user()
+    
+    # Obtener mensajes de Telegram
+    messages = get_telegram_messages(limit=50)
+    telegram_lists = []
+    
+    for message in messages:
+        if 'message' in message and 'document' in message['message']:
+            document = message['message']['document']
+            file_name = document.get('file_name', '')
+            if is_valid_list_file(file_name):
+                telegram_lists.append(file_name)
+    
+    # Verificar cuáles no están localmente
+    local_lists = os.listdir(UPLOAD_FOLDER) if os.path.exists(UPLOAD_FOLDER) else []
+    missing_lists = [lst for lst in telegram_lists if lst not in local_lists]
+    
+    return jsonify({
+        "listas_en_telegram": telegram_lists,
+        "listas_locales": local_lists,
+        "listas_faltantes": missing_lists,
+        "total_telegram": len(telegram_lists),
+        "total_local": len(local_lists),
+        "total_faltantes": len(missing_lists)
+    })
 
 # Enviar mensaje de inicio del servidor
 def send_startup_message():
     """Envía un mensaje cuando el servidor se inicia"""
     time.sleep(5)  # Esperar a que el servidor esté completamente listo
     
-    # Restaurar datos desde el respaldo al iniciar
+    # Restaurar datos desde el respaldo al iniciar (incluye listas de Telegram)
     restore_from_backup()
-    
-    # Crear respaldo automático al iniciar
-    backup_data = create_backup()
     
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
-    startup_message = f"🚀 <b>Servidor Iniciado</b>\n\n🕐 Hora de inicio: {timestamp}\n📍 Timezone: America/Havana\n✅ Estado: Listo para recibir conexiones\n📊 Listas cargadas: {len(uploads)}\n🔄 Datos restaurados desde respaldo\n📦 Respaldo automático creado"
+    
+    # Obtener estadísticas actuales
+    local_files = os.listdir(UPLOAD_FOLDER) if os.path.exists(UPLOAD_FOLDER) else []
+    
+    startup_message = f"🚀 <b>Servidor Iniciado</b>\n\n🕐 Hora de inicio: {timestamp}\n📍 Timezone: America/Havana\n✅ Estado: Listo para recibir conexiones\n📊 Listas en metadatos: {len(uploads)}\n📁 Archivos locales: {len(local_files)}\n🔄 Datos y listas restaurados desde respaldo"
     send_telegram_message(startup_message)
 
 # Variable global para mantener referencia al proceso
