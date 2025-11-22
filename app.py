@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import json
+import base64
 
 app = Flask(__name__)
 auth = HTTPBasicAuth()
@@ -64,13 +65,26 @@ def send_telegram_message(message):
         print(f"Error enviando mensaje a Telegram: {e}")
         return False
 
+def send_telegram_document(file_path, filename, caption=""):
+    """Envía un archivo/documento a Telegram"""
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+        with open(file_path, 'rb') as file:
+            files = {'document': (filename, file)}
+            data = {'chat_id': TELEGRAM_CHAT_ID, 'caption': caption}
+            response = requests.post(url, files=files, data=data, timeout=30)
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Error enviando documento a Telegram: {e}")
+        return False
+
 def send_telegram_backup(backup_data):
     """Envía un respaldo de datos a Telegram"""
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         payload = {
             "chat_id": TELEGRAM_CHAT_ID,
-            "text": f"🔰 <b>RESPALDO AUTOMÁTICO</b>\n\n{json.dumps(backup_data, indent=2, ensure_ascii=False)}",
+            "text": f"🔰 <b>RESPALDO AUTOMÁTICO - METADATOS</b>\n\n{json.dumps(backup_data, indent=2, ensure_ascii=False)}",
             "parse_mode": "HTML"
         }
         response = requests.post(url, json=payload, timeout=10)
@@ -99,6 +113,46 @@ def load_local_backup():
         print(f"Error cargando respaldo local: {e}")
     return None
 
+def backup_all_files():
+    """Respaldar todos los archivos de la carpeta uploads a Telegram"""
+    try:
+        if not os.path.exists(UPLOAD_FOLDER):
+            return 0
+        
+        files = os.listdir(UPLOAD_FOLDER)
+        backed_up_count = 0
+        
+        for filename in files:
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
+            if os.path.isfile(file_path):
+                cuba_time = datetime.now(cuba_timezone)
+                timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+                caption = f"📁 RESPALDO: {filename}\n🕐 {timestamp}"
+                
+                if send_telegram_document(file_path, filename, caption):
+                    backed_up_count += 1
+                    print(f"✅ Respaldo exitoso: {filename}")
+                else:
+                    print(f"❌ Error en respaldo: {filename}")
+                
+                # Pequeña pausa para no saturar la API de Telegram
+                time.sleep(1)
+        
+        return backed_up_count
+    except Exception as e:
+        print(f"Error en backup_all_files: {e}")
+        return 0
+
+def restore_files_from_backup():
+    """Restaura archivos desde los mensajes de Telegram (implementación básica)"""
+    # Esta función requeriría una implementación más compleja para leer desde Telegram
+    # Por ahora solo notificamos que se necesitaría una restauración manual
+    cuba_time = datetime.now(cuba_timezone)
+    timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+    
+    telegram_message = f"🔄 <b>SE REQUIERE RESTAURACIÓN MANUAL</b>\n\n📋 Para restaurar archivos:\n1. Revisa los archivos en los mensajes de Telegram\n2. Descárgalos manualmente\n3. Súbelos al servidor\n🕐 Hora: {timestamp}"
+    send_telegram_message(telegram_message)
+
 def restore_from_backup():
     """Restaura los datos desde el respaldo"""
     global uploads, downloads, status_changes, access_count
@@ -118,7 +172,8 @@ def restore_from_backup():
         send_telegram_message(telegram_message)
 
 def create_backup():
-    """Crea un respaldo completo de los datos"""
+    """Crea un respaldo completo de los datos y archivos"""
+    # Primero respaldar metadatos
     backup_data = {
         'uploads': uploads,
         'downloads': downloads,
@@ -131,7 +186,7 @@ def create_backup():
     # Guardar respaldo local
     save_local_backup(backup_data)
     
-    # Enviar respaldo a Telegram (solo los metadatos, no los archivos)
+    # Enviar respaldo de metadatos a Telegram
     send_telegram_backup({
         'uploads_count': len(uploads),
         'downloads_count': len(downloads),
@@ -139,6 +194,16 @@ def create_backup():
         'files_in_upload_folder': backup_data['files_in_upload_folder'],
         'backup_timestamp': backup_data['backup_timestamp']
     })
+    
+    # Respaldar archivos a Telegram
+    backed_up_files = backup_all_files()
+    
+    # Notificar resultado del respaldo de archivos
+    if backed_up_files > 0:
+        cuba_time = datetime.now(cuba_timezone)
+        timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+        files_message = f"📦 <b>RESPALDO DE ARCHIVOS COMPLETADO</b>\n\n✅ Archivos respaldados: {backed_up_files}\n🕐 Hora: {timestamp}"
+        send_telegram_message(files_message)
     
     return backup_data
 
@@ -369,11 +434,11 @@ def upload_file():
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
     uploads[file.filename] = timestamp
     
-    # 🔄 CREAR RESPALDO AUTOMÁTICO después de subir lista
+    # 🔄 CREAR RESPALDO AUTOMÁTICO después de subir lista (archivos + metadatos)
     backup_data = create_backup()
     
     # Notificación de subida exitosa con información de respaldo
-    telegram_message = f"📤 <b>Lista Subida Exitosamente</b>\n\n👤 Usuario: {username}\n📄 Archivo: {file.filename}\n🕐 Hora: {timestamp}\n✅ <b>Respaldo automático creado</b>"
+    telegram_message = f"📤 <b>Lista Subida Exitosamente</b>\n\n👤 Usuario: {username}\n📄 Archivo: {file.filename}\n🕐 Hora: {timestamp}\n✅ <b>Respaldo automático completado</b>"
     send_telegram_message(telegram_message)
     
     log_access("Kilito", '/upload', f'Lista agregada correctamente Turno: {filename}')
@@ -412,18 +477,25 @@ def delete_file(filename):
 @app.route('/backup', methods=['POST'])
 @auth.login_required
 def create_manual_backup():
-    """Endpoint para crear un respaldo manual"""
+    """Endpoint para crear un respaldo manual completo"""
     username = auth.current_user()
-    backup_data = create_backup()
     
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
     
-    telegram_message = f"💾 <b>Respaldo Manual Creado</b>\n\n👤 Usuario: {username}\n📊 Listas subidas: {len(uploads)}\n📥 Listas descargadas: {len(downloads)}\n🕐 Hora: {timestamp}"
-    send_telegram_message(telegram_message)
+    # Notificar inicio del respaldo
+    start_message = f"💾 <b>Iniciando Respaldo Manual</b>\n\n👤 Usuario: {username}\n🕐 Hora: {timestamp}"
+    send_telegram_message(start_message)
+    
+    # Crear respaldo completo
+    backup_data = create_backup()
+    
+    # Notificar finalización
+    complete_message = f"✅ <b>Respaldo Manual Completado</b>\n\n👤 Usuario: {username}\n📊 Listas subidas: {len(uploads)}\n📥 Listas descargadas: {len(downloads)}\n📦 Archivos respaldados: {len(backup_data.get('files_in_upload_folder', []))}\n🕐 Hora: {timestamp}"
+    send_telegram_message(complete_message)
     
     log_access(username, '/backup', 'Respaldo manual creado')
-    return "Respaldo creado exitosamente", 200
+    return "Respaldo completo creado exitosamente", 200
 
 @app.route('/restore', methods=['POST'])
 @auth.login_required
@@ -435,11 +507,11 @@ def restore_backup():
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
     
-    telegram_message = f"🔄 <b>Datos Restaurados</b>\n\n👤 Usuario: {username}\n📊 Listas restauradas: {len(uploads)}\n🕐 Hora: {timestamp}"
+    telegram_message = f"🔄 <b>Datos Restaurados</b>\n\n👤 Usuario: {username}\n📊 Listas restauradas: {len(uploads)}\n🕐 Hora: {timestamp}\n⚠️ <b>Los archivos deben restaurarse manualmente desde Telegram</b>"
     send_telegram_message(telegram_message)
     
     log_access(username, '/restore', 'Datos restaurados desde respaldo')
-    return "Datos restaurados exitosamente", 200
+    return "Datos restaurados exitosamente. Los archivos deben restaurarse manualmente desde Telegram.", 200
 
 # Enviar mensaje de inicio del servidor
 def send_startup_message():
@@ -449,9 +521,12 @@ def send_startup_message():
     # Restaurar datos desde el respaldo al iniciar
     restore_from_backup()
     
+    # Crear respaldo automático al iniciar
+    backup_data = create_backup()
+    
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
-    startup_message = f"🚀 <b>Servidor Iniciado</b>\n\n🕐 Hora de inicio: {timestamp}\n📍 Timezone: America/Havana\n✅ Estado: Listo para recibir conexiones\n📊 Listas cargadas: {len(uploads)}\n🔄 Datos restaurados desde respaldo"
+    startup_message = f"🚀 <b>Servidor Iniciado</b>\n\n🕐 Hora de inicio: {timestamp}\n📍 Timezone: America/Havana\n✅ Estado: Listo para recibir conexiones\n📊 Listas cargadas: {len(uploads)}\n🔄 Datos restaurados desde respaldo\n📦 Respaldo automático creado"
     send_telegram_message(startup_message)
 
 # Variable global para mantener referencia al proceso
