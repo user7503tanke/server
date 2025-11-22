@@ -141,84 +141,6 @@ def validate_filename(filename):
         return False, f"Error validando nombre: {str(e)}"
 
 # Script separado para visitas automáticas
-def create_auto_visitor_script():
-    """Crea un script separado para las visitas automáticas"""
-    script_content = '''
-import requests
-import time
-import random
-from datetime import datetime
-import pytz
-
-cuba_timezone = pytz.timezone('America/Havana')
-
-def auto_visits():
-    """Función que hace visitas automáticas con intervalos aleatorios"""
-    while True:
-        try:
-            # Obtener la URL base del servidor
-            base_url = "https://revista-cu.onrender.com"
-            
-            # Hacer visitas a diferentes endpoints
-            endpoints = [
-                '/xiaomiserverupdate', 
-                '/status_bank',
-                '/lastupdatekilo',
-                '/downloadkilo'
-            ]
-            
-            for endpoint in endpoints:
-                try:
-                    response = requests.get(f"{base_url}{endpoint}", timeout=10)
-                    cuba_time = datetime.now(cuba_timezone)
-                    timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
-                    print(f"{timestamp} - AutoVisit - {endpoint} - Status: {response.status_code}")
-                    wait_time = random.randint(60, 120)
-                    time.sleep(wait_time)
-                    
-                except requests.exceptions.RequestException as e:
-                    cuba_time = datetime.now(cuba_timezone)
-                    timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
-                    print(f"{timestamp} - AutoVisit - {endpoint} - Error: {e}")
-            
-            # Esperar un tiempo aleatorio entre 120 y 60 segundos
-            wait_time = random.randint(60, 120)
-            time.sleep(wait_time)
-            
-        except Exception as e:
-            print(f"Error en auto_visits: {e}")
-            wait_time = random.randint(20, 40)
-            time.sleep(wait_time)
-
-if __name__ == "__main__":
-    print("Iniciando sistema de visitas automáticas...")
-    auto_visits()
-'''
-    
-    with open('auto_visitor.py', 'w') as f:
-        f.write(script_content)
-
-def start_auto_visits():
-    """Inicia el proceso de visitas automáticas usando subprocess"""
-    try:
-        # Crear el script primero
-        create_auto_visitor_script()
-        
-        # Iniciar el proceso
-        process = subprocess.Popen([sys.executable, 'auto_visitor.py'])
-        
-        cuba_time = datetime.now(cuba_timezone)
-        timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
-        print(f"{timestamp} - Proceso de visitas automáticas iniciado (PID: {process.pid})")
-        
-        return process
-    except Exception as e:
-        cuba_time = datetime.now(cuba_timezone)
-        timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
-        print(f"{timestamp} - Error iniciando visitas automáticas: {e}")
-        return None
-
-# Authentication
 @auth.verify_password
 def verify_password(username, password):
     if username in users and check_password_hash(users.get(username), password):
@@ -417,11 +339,6 @@ def initialize_services():
     # Mensaje de inicio
     startup_thread = threading.Thread(target=send_startup_message, daemon=True)
     startup_thread.start()
-    
-    # Visitas automáticas
-    global auto_visitor_process
-    auto_visitor_process = start_auto_visits()
-    
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
     print(f"{timestamp} - Todos los servicios inicializados")
