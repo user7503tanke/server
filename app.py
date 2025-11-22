@@ -11,6 +11,7 @@ import random
 import re
 import subprocess
 import sys
+import json
 
 app = Flask(__name__)
 auth = HTTPBasicAuth()
@@ -34,8 +35,8 @@ status_changes = []
 cuba_timezone = pytz.timezone('America/Havana')
 
 # Telegram Bot Configuration
-TELEGRAM_BOT_TOKEN = "8075772181:AAFThdLwDvAHG0I0VN6wG78rdFVJNVinEzE"  # Reemplaza con tu token del bot
-TELEGRAM_CHAT_ID = "7587515668"      # Reemplaza con tu chat ID
+TELEGRAM_BOT_TOKEN = "8075772181:AAFThdLwDvAHG0I0VN6wG78rdFVJNVinEzE"
+TELEGRAM_CHAT_ID = "7587515668"
 
 #######FIIIIIINAAAAALLLL###################
 # Users
@@ -43,6 +44,9 @@ users = {
     "admin": generate_password_hash("lamermanosevende2.0"),
     "Nathan": generate_password_hash("123nathan")
 }
+
+# Backup file
+BACKUP_FILE = 'telegram_backup.json'
 
 # Helper functions
 def send_telegram_message(message):
@@ -59,6 +63,84 @@ def send_telegram_message(message):
     except Exception as e:
         print(f"Error enviando mensaje a Telegram: {e}")
         return False
+
+def send_telegram_backup(backup_data):
+    """Envía un respaldo de datos a Telegram"""
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": f"🔰 <b>RESPALDO AUTOMÁTICO</b>\n\n{json.dumps(backup_data, indent=2, ensure_ascii=False)}",
+            "parse_mode": "HTML"
+        }
+        response = requests.post(url, json=payload, timeout=10)
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Error enviando respaldo a Telegram: {e}")
+        return False
+
+def save_local_backup(backup_data):
+    """Guarda un respaldo local de los datos"""
+    try:
+        with open(BACKUP_FILE, 'w', encoding='utf-8') as f:
+            json.dump(backup_data, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        print(f"Error guardando respaldo local: {e}")
+        return False
+
+def load_local_backup():
+    """Carga el respaldo local si existe"""
+    try:
+        if os.path.exists(BACKUP_FILE):
+            with open(BACKUP_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"Error cargando respaldo local: {e}")
+    return None
+
+def restore_from_backup():
+    """Restaura los datos desde el respaldo"""
+    global uploads, downloads, status_changes, access_count
+    
+    backup_data = load_local_backup()
+    if backup_data:
+        uploads = backup_data.get('uploads', {})
+        downloads = backup_data.get('downloads', {})
+        status_changes = backup_data.get('status_changes', [])
+        access_count = backup_data.get('access_count', 0)
+        print("✅ Datos restaurados desde el respaldo")
+        
+        # Notificar restauración
+        cuba_time = datetime.now(cuba_timezone)
+        timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+        telegram_message = f"🔄 <b>Datos Restaurados desde Respaldo</b>\n\n📊 Listas subidas: {len(uploads)}\n📥 Listas descargadas: {len(downloads)}\n🕐 Hora: {timestamp}"
+        send_telegram_message(telegram_message)
+
+def create_backup():
+    """Crea un respaldo completo de los datos"""
+    backup_data = {
+        'uploads': uploads,
+        'downloads': downloads,
+        'status_changes': status_changes,
+        'access_count': access_count,
+        'files_in_upload_folder': os.listdir(UPLOAD_FOLDER) if os.path.exists(UPLOAD_FOLDER) else [],
+        'backup_timestamp': datetime.now(cuba_timezone).strftime('%Y-%m-%d %I:%M:%S %p')
+    }
+    
+    # Guardar respaldo local
+    save_local_backup(backup_data)
+    
+    # Enviar respaldo a Telegram (solo los metadatos, no los archivos)
+    send_telegram_backup({
+        'uploads_count': len(uploads),
+        'downloads_count': len(downloads),
+        'status_changes_count': len(status_changes),
+        'files_in_upload_folder': backup_data['files_in_upload_folder'],
+        'backup_timestamp': backup_data['backup_timestamp']
+    })
+    
+    return backup_data
 
 def log_access(username, endpoint, action):
     cuba_time = datetime.now(cuba_timezone)
@@ -287,8 +369,11 @@ def upload_file():
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
     uploads[file.filename] = timestamp
     
-    # Notificación de subida exitosa
-    telegram_message = f"📤 <b>Lista Subida Exitosamente</b>\n\n👤 Usuario: {username}\n📄 Archivo: {file.filename}\n🕐 Hora: {timestamp}"
+    # 🔄 CREAR RESPALDO AUTOMÁTICO después de subir lista
+    backup_data = create_backup()
+    
+    # Notificación de subida exitosa con información de respaldo
+    telegram_message = f"📤 <b>Lista Subida Exitosamente</b>\n\n👤 Usuario: {username}\n📄 Archivo: {file.filename}\n🕐 Hora: {timestamp}\n✅ <b>Respaldo automático creado</b>"
     send_telegram_message(telegram_message)
     
     log_access("Kilito", '/upload', f'Lista agregada correctamente Turno: {filename}')
@@ -312,28 +397,67 @@ def delete_file(filename):
     
     os.remove(file_path)
     
+    # 🔄 CREAR RESPALDO después de eliminar lista
+    create_backup()
+    
     # Notificación de eliminación
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
-    telegram_message = f"🗑️ <b>Lista Eliminada</b>\n\n👤 Usuario: {username}\n📄 Archivo: {filename}\n🕐 Hora: {timestamp}"
+    telegram_message = f"🗑️ <b>Lista Eliminada</b>\n\n👤 Usuario: {username}\n📄 Archivo: {filename}\n🕐 Hora: {timestamp}\n✅ <b>Respaldo actualizado</b>"
     send_telegram_message(telegram_message)
     
     log_access("Banco", f'/delete/{filename}', 'borrando lista')
     return "Lista eliminada correctamente"
 
+@app.route('/backup', methods=['POST'])
+@auth.login_required
+def create_manual_backup():
+    """Endpoint para crear un respaldo manual"""
+    username = auth.current_user()
+    backup_data = create_backup()
+    
+    cuba_time = datetime.now(cuba_timezone)
+    timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+    
+    telegram_message = f"💾 <b>Respaldo Manual Creado</b>\n\n👤 Usuario: {username}\n📊 Listas subidas: {len(uploads)}\n📥 Listas descargadas: {len(downloads)}\n🕐 Hora: {timestamp}"
+    send_telegram_message(telegram_message)
+    
+    log_access(username, '/backup', 'Respaldo manual creado')
+    return "Respaldo creado exitosamente", 200
+
+@app.route('/restore', methods=['POST'])
+@auth.login_required
+def restore_backup():
+    """Endpoint para restaurar desde el respaldo"""
+    username = auth.current_user()
+    restore_from_backup()
+    
+    cuba_time = datetime.now(cuba_timezone)
+    timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+    
+    telegram_message = f"🔄 <b>Datos Restaurados</b>\n\n👤 Usuario: {username}\n📊 Listas restauradas: {len(uploads)}\n🕐 Hora: {timestamp}"
+    send_telegram_message(telegram_message)
+    
+    log_access(username, '/restore', 'Datos restaurados desde respaldo')
+    return "Datos restaurados exitosamente", 200
+
 # Enviar mensaje de inicio del servidor
 def send_startup_message():
     """Envía un mensaje cuando el servidor se inicia"""
     time.sleep(5)  # Esperar a que el servidor esté completamente listo
+    
+    # Restaurar datos desde el respaldo al iniciar
+    restore_from_backup()
+    
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
-    startup_message = f"🚀 <b>Servidor Iniciado</b>\n\n🕐 Hora de inicio: {timestamp}\n📍 Timezone: America/Havana\n✅ Estado: Listo para recibir conexiones"
+    startup_message = f"🚀 <b>Servidor Iniciado</b>\n\n🕐 Hora de inicio: {timestamp}\n📍 Timezone: America/Havana\n✅ Estado: Listo para recibir conexiones\n📊 Listas cargadas: {len(uploads)}\n🔄 Datos restaurados desde respaldo"
     send_telegram_message(startup_message)
 
 # Variable global para mantener referencia al proceso
 auto_visitor_process = None
 
-# Iniciar servicios al arrancar
+# Inicializar servicios al arrancar
 def initialize_services():
     """Inicializa todos los servicios al arrancar la aplicación"""
     # Mensaje de inicio
@@ -345,4 +469,3 @@ def initialize_services():
 
 # Inicializar servicios cuando se importa el módulo
 initialize_services()
-
