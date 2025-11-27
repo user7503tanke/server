@@ -1,21 +1,25 @@
 from flask import Flask, jsonify, request, render_template, send_from_directory
 from flask_httpauth import HTTPBasicAuth
 from werkzeug.security import generate_password_hash, check_password_hash
-import os
 import pytz
 from datetime import datetime
 import threading
 import time
 import requests
 import random
-import re
 import subprocess
 import sys
 import json
 import base64
-import sqlite3
 from contextlib import contextmanager
 
+import os
+import sqlite3
+import uuid
+import re
+from flask import Flask, request, jsonify, send_file, abort
+import tempfile
+import shutil
 app = Flask(__name__)
 auth = HTTPBasicAuth()
 
@@ -29,6 +33,282 @@ if not os.path.exists(LOG_FILE):
     with open(LOG_FILE, 'w') as f:
         f.write('')
 
+
+# Configuración
+BASE_URL = "http://127.0.0.1:5000/a12/devices/"
+SQLITE_URL = 'http://127.0.0.1:5000/a12/getBLDatabaseManager.php?model='
+PLIST_URL = 'http://127.0.0.1:5000/a12/Hola.plist'
+
+# Rutas de bases de datos
+ORIGINAL_BL_DB = "databases/original.BLDatabaseManager.sqlite"
+ORIGINAL_DOWNLOADS_DB = "databases/original.downloads.28.sqlitedb"
+ACTIVATOR_DB = "databases/activator.sqlite"
+
+def validate_guid(guid):
+    """Valida el formato del GUID"""
+    pattern = r'^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
+    return re.match(pattern, guid) is not None
+
+@app.route('/getBLDatabaseManager.php', methods=['GET'])
+def get_bl_database_manager():
+    """Equivalente a getBLDatabaseManager.php"""
+    model = request.args.get('model')
+    
+    if not model:
+        return "Missing parameter: model", 400
+    
+    # Validar que existe el directorio del modelo
+    model_path = os.path.join("devices", model)
+    if not os.path.isdir(model_path):
+        return "Model not found", 404
+    
+    epub_url = f"{BASE_URL}{model}/asset.epub"
+    
+    # Verificar base de datos original
+    if not os.path.exists(ORIGINAL_BL_DB):
+        return "Original DB not found", 404
+    
+    # Crear archivo temporal
+    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp_file:
+        tmp_path = tmp_file.name
+    
+    # Copiar base de datos
+    shutil.copy2(ORIGINAL_BL_DB, tmp_path)
+    
+    try:
+        # Actualizar base de datos
+        conn = sqlite3.connect(tmp_path)
+        cursor = conn.cursor()
+        
+        # Actualizar URLs
+        cursor.execute("UPDATE ZBLDOWNLOADINFO SET ZTHUMBNAILIMAGEURL = ?", (epub_url,))
+        cursor.execute("UPDATE ZBLDOWNLOADINFO SET ZURL = ?", (epub_url,))
+        
+        conn.commit()
+        conn.close()
+        
+        # Enviar archivo
+        return send_file(
+            tmp_path,
+            as_attachment=True,
+            download_name='BLDatabaseManager.sqlite',
+            mimetype='application/octet-stream'
+        )
+        
+    except Exception as e:
+        return f"SQL update failed: {str(e)}", 500
+    finally:
+        # Limpiar archivo temporal
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+@app.route('/getSqlite.php', methods=['GET'])
+def get_sqlite():
+    """Equivalente a getSqlite.php"""
+    model = request.args.get('model')
+    guid = request.args.get('guid')
+    
+    if not model:
+        return "Missing Model parameter", 400
+    if not guid:
+        return "Missing GUID parameter", 400
+    if not validate_guid(guid):
+        return "Invalid GUID format", 400
+    
+    # Verificar base de datos original
+    if not os.path.exists(ORIGINAL_DOWNLOADS_DB):
+        return "Original DB not found", 404
+    
+    # Crear archivo temporal
+    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp_file:
+        tmp_path = tmp_file.name
+    
+    # Copiar base de datos
+    shutil.copy2(ORIGINAL_DOWNLOADS_DB, tmp_path)
+    
+    try:
+        conn = sqlite3.connect(tmp_path)
+        cursor = conn.cursor()
+        
+        # Actualizar URLs
+        sqlite_model_url = f"{SQLITE_URL}{model}"
+        cursor.execute("UPDATE asset SET url = ? WHERE url = 'sqlite'", (sqlite_model_url,))
+        cursor.execute("UPDATE asset SET url = ? WHERE url = 'plist'", (PLIST_URL,))
+        
+        # Actualizar GUIDs en local_path
+        cursor.execute("SELECT pid, local_path FROM asset WHERE local_path IS NOT NULL")
+        rows = cursor.fetchall()
+        
+        for pid, local_path in rows:
+            if local_path:
+                # Buscar GUID en el path
+                guid_match = re.search(r'[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}', local_path, re.IGNORECASE)
+                if guid_match:
+                    old_guid = guid_match.group(0)
+                    new_path = local_path.replace(old_guid, guid)
+                    cursor.execute("UPDATE asset SET local_path = ? WHERE pid = ?", (new_path, pid))
+        
+        conn.commit()
+        conn.close()
+        
+        # Enviar archivo
+        return send_file(
+            tmp_path,
+            as_attachment=True,
+            download_name='downloads.28.sqlitedb',
+            mimetype='application/octet-stream'
+        )
+        
+    except Exception as e:
+        return f"Database operation failed: {str(e)}", 500
+    finally:
+        # Limpiar archivo temporal
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+@app.route('/registerGuid.php', methods=['POST'])
+def register_guid():
+    """Equivalente a registerGuid.php"""
+    serial = request.form.get('serial', '').strip()
+    guid = request.form.get('guid', '').strip()
+    
+    if not serial or not guid:
+        return jsonify({
+            "success": False,
+            "message": "Faltan parámetros: serial y guid son requeridos."
+        }), 400
+    
+    # Verificar base de datos
+    if not os.path.exists(ACTIVATOR_DB):
+        return jsonify({
+            "success": False,
+            "message": "La base de datos no existe."
+        }), 404
+    
+    try:
+        conn = sqlite3.connect(ACTIVATOR_DB)
+        cursor = conn.cursor()
+        
+        # Verificar si el serial existe
+        cursor.execute("SELECT status FROM registered_serials WHERE serial = ? LIMIT 1", (serial,))
+        row = cursor.fetchone()
+        
+        if not row:
+            conn.close()
+            return jsonify({
+                "success": False,
+                "message": "El serial no existe."
+            }), 404
+        
+        # Validar que status NO esté vacío
+        status = row[0]
+        if not status or str(status).strip() == '':
+            conn.close()
+            return jsonify({
+                "success": False,
+                "message": "El serial existe pero su status está vacío. No se puede registrar GUID."
+            }), 400
+        
+        # Registrar GUID
+        cursor.execute("UPDATE registered_serials SET stored_guid = ? WHERE serial = ?", (guid, serial))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": "GUID registrado correctamente.",
+            "serial": serial,
+            "guid": guid
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Error de base de datos: {str(e)}"
+        }), 500
+
+@app.route('/checkAuthorized.php', methods=['GET'])
+def check_authorized():
+    """Equivalente a checkAuthorized.php"""
+    serial = request.args.get('serial')
+    
+    if not serial:
+        return jsonify({
+            "status": "error",
+            "message": "Missing parameter: serial"
+        }), 400
+    
+    try:
+        # Verificar base de datos
+        if not os.path.exists(ACTIVATOR_DB):
+            raise Exception("Database file not found")
+        
+        conn = sqlite3.connect(ACTIVATOR_DB)
+        cursor = conn.cursor()
+        
+        # Buscar serial
+        cursor.execute("SELECT serial, status, stored_guid FROM registered_serials WHERE serial = ? LIMIT 1", (serial,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row:
+            return jsonify({
+                "status": "Not Authorized",
+                "message": "Serial not found"
+            }), 200
+        
+        serial_num, status, stored_guid = row
+        
+        return jsonify({
+            "status": "Authorized",
+            "stored_guid": stored_guid or "",
+            "serial": serial_num
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "status": "Error",
+            "message": str(e)
+        }), 500
+
+@app.route('/checkModel.php', methods=['GET'])
+def check_model():
+    """Equivalente a checkModel.php"""
+    model = request.args.get('model')
+    
+    if not model:
+        return jsonify({
+            "status": "error",
+            "message": "Missing parameter: model"
+        }), 400
+    
+    path = os.path.join("devices", model)
+    
+    if os.path.isdir(path):
+        return jsonify({
+            "status": "ok",
+            "model_name": model
+        })
+    else:
+        return jsonify({
+            "status": "not_found",
+            "model_name": "Unknown"
+        }), 404
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({
+        "status": "error",
+        "message": "Endpoint not found"
+    }), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({
+        "status": "error",
+        "message": "Internal server error"
+    }), 500
+    
 # Database file
 DATABASE_FILE = 'lists_database.db'
 
