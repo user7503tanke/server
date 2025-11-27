@@ -35,9 +35,9 @@ if not os.path.exists(LOG_FILE):
 
 
 # Configuración
-BASE_URL = "http://127.0.0.1:5000/a12/devices/"
-SQLITE_URL = 'http://127.0.0.1:5000/a12/getBLDatabaseManager.php?model='
-PLIST_URL = 'http://127.0.0.1:5000/a12/Hola.plist'
+BASE_URL = "https://server-dbi6.onrender.com/devices/"
+SQLITE_URL = 'https://server-dbi6.onrender.com/getBLDatabaseManager.php?model='
+PLIST_URL = 'https://server-dbi6.onrender.com/Hola.plist'
 
 # Rutas de bases de datos
 ORIGINAL_BL_DB = "databases/original.BLDatabaseManager.sqlite"
