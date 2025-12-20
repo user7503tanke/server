@@ -469,6 +469,540 @@ def verify_password(username, password):
 # Routes
 @app.route('/')
 def index():
+    return """<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nicolás Maquiavelo - Frases y Pensamientos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Raleway:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Raleway', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8f5f0;
+            background-image: linear-gradient(to bottom, rgba(248, 245, 240, 0.9), rgba(248, 245, 240, 0.9)), url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect fill="%23d4b483" opacity="0.1" width="100" height="100"/><path fill="%238a6d3b" opacity="0.1" d="M20,20 L80,20 L80,80 L20,80 Z M25,25 L75,25 L75,75 L25,75 Z"/></svg>');
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Header styles */
+        header {
+            text-align: center;
+            padding: 30px 0;
+            border-bottom: 2px solid #8a6d3b;
+            margin-bottom: 40px;
+        }
+        
+        h1 {
+            font-family: 'Cinzel', serif;
+            font-size: 3.2rem;
+            color: #5c4628;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            color: #8a6d3b;
+            font-style: italic;
+            margin-bottom: 20px;
+        }
+        
+        /* Main content */
+        .main-content {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .portrait-section {
+            flex: 1;
+            min-width: 300px;
+            text-align: center;
+        }
+        
+        .portrait {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 10px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+            border: 8px solid #d4b483;
+            margin-bottom: 20px;
+            transition: transform 0.3s ease;
+        }
+        
+        .portrait:hover {
+            transform: scale(1.02);
+        }
+        
+        .portrait-caption {
+            font-style: italic;
+            color: #666;
+            font-size: 0.95rem;
+        }
+        
+        .quotes-section {
+            flex: 2;
+            min-width: 300px;
+        }
+        
+        .section-title {
+            font-family: 'Cinzel', serif;
+            font-size: 2rem;
+            color: #5c4628;
+            border-bottom: 1px solid #d4b483;
+            padding-bottom: 10px;
+            margin-bottom: 25px;
+        }
+        
+        .quote-card {
+            background-color: white;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            border-left: 5px solid #8a6d3b;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .quote-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        }
+        
+        .quote-text {
+            font-size: 1.3rem;
+            color: #444;
+            font-style: italic;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+        
+        .quote-reference {
+            color: #8a6d3b;
+            font-weight: 600;
+            text-align: right;
+            font-size: 0.95rem;
+        }
+        
+        .quote-icon {
+            color: #d4b483;
+            font-size: 1.5rem;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        
+        /* Timeline section */
+        .timeline-section {
+            margin-bottom: 40px;
+        }
+        
+        .timeline {
+            position: relative;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            width: 3px;
+            background-color: #8a6d3b;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            margin-left: -1.5px;
+        }
+        
+        .timeline-item {
+            padding: 10px 40px;
+            position: relative;
+            width: 50%;
+            box-sizing: border-box;
+            margin-bottom: 30px;
+        }
+        
+        .timeline-item:nth-child(odd) {
+            left: 0;
+        }
+        
+        .timeline-item:nth-child(even) {
+            left: 50%;
+        }
+        
+        .timeline-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            position: relative;
+        }
+        
+        .timeline-year {
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            color: #8a6d3b;
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+        }
+        
+        .timeline-dot {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            right: -10px;
+            background-color: #8a6d3b;
+            border-radius: 50%;
+            top: 15px;
+        }
+        
+        .timeline-item:nth-child(even) .timeline-dot {
+            left: -10px;
+        }
+        
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 25px;
+            background-color: #5c4628;
+            color: #f8f5f0;
+            border-radius: 10px 10px 0 0;
+            margin-top: 40px;
+        }
+        
+        .footer-text {
+            margin-bottom: 15px;
+        }
+        
+        .quote-button {
+            background-color: #8a6d3b;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 1.1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            font-family: 'Cinzel', serif;
+            letter-spacing: 1px;
+            margin-top: 15px;
+        }
+        
+        .quote-button:hover {
+            background-color: #5c4628;
+        }
+        
+        .social-icons {
+            margin-top: 15px;
+        }
+        
+        .social-icons a {
+            color: #f8f5f0;
+            font-size: 1.2rem;
+            margin: 0 10px;
+            transition: color 0.3s ease;
+        }
+        
+        .social-icons a:hover {
+            color: #d4b483;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.5rem;
+            }
+            
+            .timeline::before {
+                left: 31px;
+            }
+            
+            .timeline-item {
+                width: 100%;
+                padding-left: 70px;
+                padding-right: 25px;
+            }
+            
+            .timeline-item:nth-child(even) {
+                left: 0;
+            }
+            
+            .timeline-dot {
+                left: 21px !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Nicolás Maquiavelo</h1>
+            <p class="subtitle">Diplomático, filósofo político y escritor italiano del Renacimiento</p>
+        </header>
+        
+        <main class="main-content">
+            <section class="portrait-section">
+                <h2 class="section-title">Retrato</h2>
+                <div class="portrait-container">
+                    <!-- Imagen de Maquiavelo generada con CSS placeholder -->
+                    <div class="portrait" id="maquiaveloPortrait"></div>
+                    <p class="portrait-caption">Retrato de Nicolás Maquiavelo (1469-1527)</p>
+                </div>
+                <div class="portrait-info">
+                    <h3 class="section-title" style="font-size: 1.5rem; margin-top: 20px;">Biografía Resumida</h3>
+                    <p>Nicolás Maquiavelo fue un diplomático, funcionario público, filósofo político y escritor italiano del Renacimiento. Es considerado el fundador de la filosofía política moderna, y su obra más famosa, "El Príncipe", escrita alrededor de 1513, se convirtió en un tratado fundamental sobre el ejercicio del poder.</p>
+                </div>
+            </section>
+            
+            <section class="quotes-section">
+                <h2 class="section-title">Frases Célebres</h2>
+                
+                <div class="quote-card">
+                    <i class="fas fa-quote-left quote-icon"></i>
+                    <p class="quote-text">"Es mejor ser temido que amado, si no se puede ser ambas cosas."</p>
+                    <p class="quote-reference">— De "El Príncipe", Capítulo XVII</p>
+                </div>
+                
+                <div class="quote-card">
+                    <i class="fas fa-quote-left quote-icon"></i>
+                    <p class="quote-text">"El fin justifica los medios."</p>
+                    <p class="quote-reference">— Atribuida a Maquiavelo, aunque no aparece textualmente en sus obras</p>
+                </div>
+                
+                <div class="quote-card">
+                    <i class="fas fa-quote-left quote-icon"></i>
+                    <p class="quote-text">"Todos los profetas armados triunfaron, y los desarmados fueron destruidos."</p>
+                    <p class="quote-reference">— De "El Príncipe", Capítulo VI</p>
+                </div>
+                
+                <div class="quote-card">
+                    <i class="fas fa-quote-left quote-icon"></i>
+                    <p class="quote-text">"Los hombres ofenden antes al que aman que al que temen."</p>
+                    <p class="quote-reference">— De "El Príncipe", Capítulo XVII</p>
+                </div>
+                
+                <div class="quote-card">
+                    <i class="fas fa-quote-left quote-icon"></i>
+                    <p class="quote-text">"La principal base de todos los estados son las buenas leyes y las buenas armas."</p>
+                    <p class="quote-reference">— De "El Príncipe", Capítulo XII</p>
+                </div>
+            </section>
+        </main>
+        
+        <section class="timeline-section">
+            <h2 class="section-title">Línea de Tiempo</h2>
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-content">
+                        <div class="timeline-year">1469</div>
+                        <p>Nacimiento de Nicolás Maquiavelo en Florencia, Italia.</p>
+                    </div>
+                    <div class="timeline-dot"></div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-content">
+                        <div class="timeline-year">1498</div>
+                        <p>Es nombrado secretario de la Segunda Cancillería de la República de Florencia.</p>
+                    </div>
+                    <div class="timeline-dot"></div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-content">
+                        <div class="timeline-year">1513</div>
+                        <p>Escribe su obra más famosa, "El Príncipe", dedicada a Lorenzo de Médici.</p>
+                    </div>
+                    <div class="timeline-dot"></div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-content">
+                        <div class="timeline-year">1520</div>
+                        <p>Escribe "El arte de la guerra", su única obra política publicada en vida.</p>
+                    </div>
+                    <div class="timeline-dot"></div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-content">
+                        <div class="timeline-year">1527</div>
+                        <p>Muerte de Maquiavelo en Florencia a los 58 años.</p>
+                    </div>
+                    <div class="timeline-dot"></div>
+                </div>
+            </div>
+        </section>
+        
+        <footer>
+            <p class="footer-text">"Maquiavelo no inventó la maquiavelismo, solo lo describió"</p>
+            <button class="quote-button" id="newQuoteButton">Mostrar otra frase</button>
+            <div class="social-icons">
+                <a href="#"><i class="fab fa-twitter"></i></a>
+                <a href="#"><i class="fab fa-facebook"></i></a>
+                <a href="#"><i class="fab fa-instagram"></i></a>
+                <a href="#"><i class="fas fa-share-alt"></i></a>
+            </div>
+            <p style="margin-top: 20px; font-size: 0.9rem;">© 2023 - Página dedicada a Nicolás Maquiavelo</p>
+        </footer>
+    </div>
+    
+    <script>
+        // Datos de frases adicionales
+        const additionalQuotes = [
+            {
+                text: "Nunca fue discreto dejar ganar a uno para que otro pierda.",
+                reference: "— De 'El Príncipe'"
+            },
+            {
+                text: "Donde hay buena disciplina, tiene que haber buen ejército.",
+                reference: "— De 'El arte de la guerra'"
+            },
+            {
+                text: "Aquellos que consiguen ser príncipes gracias a sus virtudes, se convierten en príncipes con dificultad, pero se mantienen con facilidad.",
+                reference: "— De 'El Príncipe'"
+            },
+            {
+                text: "Los hombres cambian de amores con más facilidad y ligereza que de miedos.",
+                reference: "— De 'Discursos sobre la primera década de Tito Livio'"
+            },
+            {
+                text: "El que quiere ser rico en un día, será ahorcado en un año.",
+                reference: "— De 'El Príncipe'"
+            },
+            {
+                text: "La naturaleza de los pueblos es casi siempre la misma; y es diversa y variable la de los gobiernos.",
+                reference: "— De 'Discursos sobre la primera década de Tito Livio'"
+            }
+        ];
+        
+        // Frases iniciales
+        const initialQuotes = [
+            {
+                text: "Es mejor ser temido que amado, si no se puede ser ambas cosas.",
+                reference: "— De 'El Príncipe', Capítulo XVII"
+            },
+            {
+                text: "El fin justifica los medios.",
+                reference: "— Atribuida a Maquiavelo, aunque no aparece textualmente en sus obras"
+            },
+            {
+                text: "Todos los profetas armados triunfaron, y los desarmados fueron destruidos.",
+                reference: "— De 'El Príncipe', Capítulo VI"
+            },
+            {
+                text: "Los hombres ofenden antes al que aman que al que temen.",
+                reference: "— De 'El Príncipe', Capítulo XVII"
+            },
+            {
+                text: "La principal base de todos los estados son las buenas leyes y las buenas armas.",
+                reference: "— De 'El Príncipe', Capítulo XII"
+            }
+        ];
+        
+        // Combinar todas las frases
+        const allQuotes = [...initialQuotes, ...additionalQuotes];
+        
+        // Elementos DOM
+        const quoteButton = document.getElementById('newQuoteButton');
+        const quoteCards = document.querySelectorAll('.quote-card');
+        
+        // Crear imagen de Maquiavelo con CSS
+        const portrait = document.getElementById('maquiaveloPortrait');
+        portrait.innerHTML = `
+            <svg width="100%" height="100%" viewBox="0 0 400 500" xmlns="http://www.w3.org/2000/svg">
+                <rect width="400" height="500" fill="#d4b483"/>
+                <circle cx="200" cy="150" r="80" fill="#8a6d3b"/>
+                <rect x="120" y="230" width="160" height="200" fill="#5c4628"/>
+                <path d="M 120 230 Q 200 180 280 230" fill="none" stroke="#5c4628" stroke-width="4"/>
+                <ellipse cx="160" cy="120" rx="20" ry="30" fill="#f8f5f0"/>
+                <ellipse cx="240" cy="120" rx="20" ry="30" fill="#f8f5f0"/>
+                <circle cx="160" cy="110" r="8" fill="#333"/>
+                <circle cx="240" cy="110" r="8" fill="#333"/>
+                <path d="M 170 160 Q 200 180 230 160" fill="none" stroke="#333" stroke-width="2"/>
+                <rect x="170" y="250" width="60" height="80" fill="#333"/>
+                <path d="M 140 430 L 260 430 L 250 480 L 150 480 Z" fill="#333"/>
+            </svg>
+        `;
+        
+        // Función para cambiar una frase aleatoriamente
+        function changeRandomQuote() {
+            // Obtener un índice aleatorio de todas las frases disponibles
+            const randomIndex = Math.floor(Math.random() * allQuotes.length);
+            const randomQuote = allQuotes[randomIndex];
+            
+            // Obtener un índice aleatorio de las tarjetas de frases visibles (excluyendo las dos primeras)
+            const cardIndex = Math.floor(Math.random() * (quoteCards.length - 2)) + 2;
+            const selectedCard = quoteCards[cardIndex];
+            
+            // Actualizar el contenido de la tarjeta seleccionada
+            const quoteText = selectedCard.querySelector('.quote-text');
+            const quoteReference = selectedCard.querySelector('.quote-reference');
+            
+            quoteText.textContent = `"${randomQuote.text}"`;
+            quoteReference.textContent = randomQuote.reference;
+            
+            // Agregar efecto visual
+            selectedCard.style.transform = 'scale(1.05)';
+            selectedCard.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15)';
+            
+            setTimeout(() => {
+                selectedCard.style.transform = '';
+                selectedCard.style.boxShadow = '';
+            }, 300);
+        }
+        
+        // Evento para el botón
+        quoteButton.addEventListener('click', changeRandomQuote);
+        
+        // Efecto adicional: cambiar color de fondo al pasar sobre las tarjetas
+        quoteCards.forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.backgroundColor = '#f8f5f0';
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.backgroundColor = 'white';
+            });
+        });
+        
+        // Cambiar automáticamente una frase cada 15 segundos
+        setInterval(changeRandomQuote, 15000);
+        
+        // Efecto de aparición para las tarjetas
+        document.addEventListener('DOMContentLoaded', function() {
+            quoteCards.forEach((card, index) => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(20px)';
+                
+                setTimeout(() => {
+                    card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                }, 100 * index);
+            });
+        });
+    </script>
+</body>
+</html>""",200
     #with open(LOG_FILE, 'r') as f:
 #        logs = f.readlines()
 #    
@@ -482,7 +1016,6 @@ def index():
 #    download_list = [f"{file} (Bajado el {time})" for file, time in downloads_dict.items()]
 #    status_history = status_changes_list.copy()
     
-    return "es mejor ser temido que ser amado",200
     
 @app.route('/status')
 def get_status():
