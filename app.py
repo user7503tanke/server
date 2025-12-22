@@ -1124,7 +1124,7 @@ def upload_file():
     
     log_access("Kilito", '/upload', f'Lista {"reemplazada" if os.path.exists(file_path) else "agregada"} correctamente: {filename}')
     
-    return f"Lista {'reemplazada' if os.path.exists(file_path) else 'agregada'} correctamente: {filename}", 200
+    return f"Lista {'agregada' if os.path.exists(file_path) else 'agregada'} correctamente: {filename}", 200
 
 @app.route('/hora')
 def get_stkffkatus():
