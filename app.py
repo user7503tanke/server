@@ -1086,7 +1086,491 @@ def down():
 
 @app.route('/update')
 def doggggwn():
-    return "Contacte con el recolector para obtener la ultima versión"
+    return """<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contacta para la Última Versión</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #0c2461 0%, #1e3799 50%, #4a69bd 100%);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 40px;
+        }
+
+        .header {
+            text-align: center;
+            animation: fadeInDown 1s ease-out;
+        }
+
+        .logo {
+            font-size: 3.5rem;
+            margin-bottom: 15px;
+            color: #6a89cc;
+            filter: drop-shadow(0 0 10px rgba(106, 137, 204, 0.5));
+        }
+
+        .title {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 3.2rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, #6a89cc, #82ccdd);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            line-height: 1.2;
+        }
+
+        .subtitle {
+            font-size: 1.3rem;
+            font-weight: 300;
+            opacity: 0.9;
+            max-width: 700px;
+            margin: 0 auto 20px;
+        }
+
+        .highlight {
+            color: #82ccdd;
+            font-weight: 600;
+        }
+
+        .content {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 50px;
+            width: 100%;
+            animation: fadeInUp 1.2s ease-out 0.3s both;
+        }
+
+        .info-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            flex: 1;
+            min-width: 300px;
+            max-width: 500px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.4s ease, box-shadow 0.4s ease;
+        }
+
+        .info-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-title {
+            font-size: 1.8rem;
+            margin-bottom: 25px;
+            color: #82ccdd;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-title i {
+            font-size: 2rem;
+        }
+
+        .features {
+            list-style: none;
+            margin-bottom: 30px;
+        }
+
+        .features li {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 1.1rem;
+        }
+
+        .features li i {
+            color: #6a89cc;
+            font-size: 1.3rem;
+        }
+
+        .contact-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label {
+            font-weight: 500;
+            color: #82ccdd;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            padding: 15px;
+            border-radius: 10px;
+            border: none;
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            font-family: 'Poppins', sans-serif;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.25);
+            box-shadow: 0 0 0 2px #6a89cc;
+        }
+
+        .form-group textarea {
+            min-height: 150px;
+            resize: vertical;
+        }
+
+        .submit-btn {
+            background: linear-gradient(to right, #6a89cc, #82ccdd);
+            color: white;
+            border: none;
+            padding: 18px;
+            border-radius: 10px;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            letter-spacing: 1px;
+        }
+
+        .submit-btn:hover {
+            background: linear-gradient(to right, #82ccdd, #6a89cc);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+
+        .floating-icons {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .icon {
+            position: absolute;
+            font-size: 2rem;
+            opacity: 0.1;
+            color: #82ccdd;
+            animation: float 15s infinite linear;
+        }
+
+        .version-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(45deg, #6a89cc, #82ccdd);
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            animation: pulse 2s infinite;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            opacity: 0.7;
+            font-size: 0.9rem;
+            animation: fadeIn 2s ease-out 1.5s both;
+        }
+
+        /* Animaciones */
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 0.7;
+            }
+        }
+
+        @keyframes float {
+            0% {
+                transform: translate(0, 0) rotate(0deg);
+            }
+            25% {
+                transform: translate(20px, 50px) rotate(90deg);
+            }
+            50% {
+                transform: translate(40px, 0) rotate(180deg);
+            }
+            75% {
+                transform: translate(20px, -50px) rotate(270deg);
+            }
+            100% {
+                transform: translate(0, 0) rotate(360deg);
+            }
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .title {
+                font-size: 2.5rem;
+            }
+            
+            .subtitle {
+                font-size: 1.1rem;
+            }
+            
+            .info-card {
+                padding: 30px 25px;
+            }
+            
+            .content {
+                gap: 30px;
+            }
+            
+            .version-badge {
+                position: relative;
+                top: 0;
+                right: 0;
+                margin-bottom: 20px;
+            }
+            
+            .container {
+                gap: 30px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="floating-icons" id="floating-icons"></div>
+    
+    <div class="version-badge">ÚLTIMA VERSIÓN DISPONIBLE</div>
+    
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <i class="fas fa-rocket"></i>
+            </div>
+            <h1 class="title">Contacta con el Administrador</h1>
+            <p class="subtitle">Para obtener acceso a la <span class="highlight">última versión</span> de nuestra plataforma, completa el formulario y nuestro equipo te contactará en menos de 24 horas.</p>
+        </div>
+        
+        <div class="content">
+            <div class="info-card">
+                <h2 class="card-title"><i class="fas fa-star"></i> Beneficios de la nueva versión</h2>
+                <ul class="features">
+                    <li><i class="fas fa-check-circle"></i> Interfaz completamente renovada y más intuitiva</li>
+                    <li><i class="fas fa-check-circle"></i> Rendimiento optimizado en un 40%</li>
+                    <li><i class="fas fa-check-circle"></i> Nuevas funciones exclusivas para usuarios</li>
+                    <li><i class="fas fa-check-circle"></i> Mayor seguridad y protección de datos</li>
+                    <li><i class="fas fa-check-circle"></i> Soporte para dispositivos móviles mejorado</li>
+                    <li><i class="fas fa-check-circle"></i> Integración con herramientas populares</li>
+                </ul>
+                <div class="card-title"><i class="fas fa-shield-alt"></i> Proceso rápido y seguro</div>
+                <p>Una vez que envíes tu solicitud, el administrador verificará tu cuenta y te proporcionará acceso inmediato a todas las nuevas características.</p>
+            </div>
+            
+            <div class="info-card">
+                <h2 class="card-title"><i class="fas fa-paper-plane"></i> Solicita tu acceso</h2>
+                <form class="contact-form" id="contactForm">
+                    <div class="form-group">
+                        <label for="name"><i class="fas fa-user"></i> Nombre completo</label>
+                        <input type="text" id="name" placeholder="Ingresa tu nombre" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email"><i class="fas fa-envelope"></i> Correo electrónico</label>
+                        <input type="email" id="email" placeholder="ejemplo@correo.com" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="company"><i class="fas fa-building"></i> Empresa o organización (opcional)</label>
+                        <input type="text" id="company" placeholder="Nombre de tu empresa">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="message"><i class="fas fa-comment-alt"></i> Mensaje para el administrador</label>
+                        <textarea id="message" placeholder="Explícanos por qué deseas obtener la última versión..." required>Me gustaría obtener acceso a la última versión de la plataforma para aprovechar todas las nuevas funciones y mejoras de rendimiento. Por favor, contáctame para proceder con el proceso.</textarea>
+                    </div>
+                    
+                    <button type="submit" class="submit-btn">
+                        <i class="fas fa-paper-plane"></i> Enviar solicitud
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>© 2023 Todos los derechos reservados | La última versión incluye mejoras significativas de rendimiento y seguridad</p>
+        </div>
+    </div>
+
+    <script>
+        // Crear iconos flotantes
+        const floatingIcons = document.getElementById('floating-icons');
+        const icons = ['fa-code', 'fa-cog', 'fa-bolt', 'fa-cloud', 'fa-database', 'fa-lock', 'fa-mobile-alt', 'fa-share-alt', 'fa-sync', 'fa-wifi'];
+        
+        for (let i = 0; i < 20; i++) {
+            const icon = document.createElement('div');
+            icon.classList.add('icon');
+            icon.innerHTML = `<i class="fas ${icons[Math.floor(Math.random() * icons.length)]}"></i>`;
+            
+            // Posición aleatoria
+            icon.style.left = `${Math.random() * 100}%`;
+            icon.style.top = `${Math.random() * 100}%`;
+            
+            // Tamaño aleatorio
+            const size = Math.random() * 2 + 1;
+            icon.style.fontSize = `${size}rem`;
+            
+            // Retraso de animación aleatorio
+            icon.style.animationDelay = `${Math.random() * 5}s`;
+            icon.style.animationDuration = `${Math.random() * 10 + 10}s`;
+            
+            floatingIcons.appendChild(icon);
+        }
+        
+        // Manejar el envío del formulario
+        const contactForm = document.getElementById('contactForm');
+        
+        contactForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Obtener valores del formulario
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            
+            // Crear efecto de éxito
+            const submitBtn = this.querySelector('.submit-btn');
+            const originalText = submitBtn.innerHTML;
+            
+            submitBtn.innerHTML = '<i class="fas fa-check"></i> Solicitud enviada';
+            submitBtn.style.background = 'linear-gradient(to right, #2ecc71, #27ae60)';
+            
+            // Mostrar mensaje de confirmación
+            setTimeout(() => {
+                alert(`¡Gracias ${name}! Tu solicitud ha sido enviada. El administrador te contactará en ${email} en menos de 24 horas.`);
+                submitBtn.innerHTML = originalText;
+                submitBtn.style.background = 'linear-gradient(to right, #6a89cc, #82ccdd)';
+                contactForm.reset();
+                
+                // Restablecer el mensaje por defecto
+                document.getElementById('message').value = "Me gustaría obtener acceso a la última versión de la plataforma para aprovechar todas las nuevas funciones y mejoras de rendimiento. Por favor, contáctame para proceder con el proceso.";
+            }, 1500);
+        });
+        
+        // Efecto de escritura para el título
+        const title = document.querySelector('.title');
+        const originalTitle = title.textContent;
+        title.textContent = '';
+        
+        let i = 0;
+        function typeWriter() {
+            if (i < originalTitle.length) {
+                title.textContent += originalTitle.charAt(i);
+                i++;
+                setTimeout(typeWriter, 50);
+            }
+        }
+        
+        // Iniciar la animación de escritura después de un breve retraso
+        setTimeout(typeWriter, 500);
+        
+        // Efecto de aparición para los elementos de la lista
+        const featureItems = document.querySelectorAll('.features li');
+        featureItems.forEach((item, index) => {
+            item.style.opacity = '0';
+            item.style.transform = 'translateX(-20px)';
+            
+            setTimeout(() => {
+                item.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+                item.style.opacity = '1';
+                item.style.transform = 'translateX(0)';
+            }, 800 + (index * 150));
+        });
+    </script>
+</body>
+</html>"""
 
 @app.route('/download/<filename>', methods=['GET'])
 @auth.login_required
