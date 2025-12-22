@@ -56,7 +56,7 @@ cuba_timezone = pytz.timezone('America/Havana')
 
 # Telegram Bot Configuration
 TELEGRAM_BOT_TOKEN = "8075772181:AAFThdLwDvAHG0I0VN6wG78rdFVJNVinEzE"
-TELEGRAM_CHAT_ID = "7587515668"  # Cambia esto al ID de tu grupo "-1003535679115"
+TELEGRAM_CHAT_ID = "-1003535679115"  # Cambia esto al ID de tu grupo ""
 
 #######FIIIIIINAAAAALLLL###################
 # Users
