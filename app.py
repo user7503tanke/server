@@ -1078,7 +1078,7 @@ def change_status():
 
 @app.route('/lastupdatekilo')
 def uplast():
-    return "vdataantiloqueraV2.8"
+    return "vdataantiloqueraV2.9"
 
 @app.route('/downloadkilo')
 def down():
