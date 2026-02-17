@@ -1,0 +1,49 @@
+body {
+    background-color: #f8f9fa;
+}
+
+.navbar {
+    box-shadow: 0 2px 4px rgba(0,0,0,.1);
+}
+
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,.05);
+    border: none;
+    margin-bottom: 20px;
+}
+
+.card-header {
+    border-bottom: none;
+    font-weight: 500;
+}
+
+pre {
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    padding: 10px;
+    border: 1px solid #dee2e6;
+}
+
+.badge {
+    font-size: 0.9em;
+    padding: 8px 12px;
+}
+
+.table td {
+    vertical-align: middle;
+}
+
+.btn-group-sm > .btn, .btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+.log-entry {
+    border-left: 3px solid;
+    padding-left: 10px;
+    margin-bottom: 10px;
+}
+
+.log-entry.registered { border-color: #28a745; }
+.log-entry.updated { border-color: #17a2b8; }
+.log-entry.deleted { border-color: #dc3545; }
