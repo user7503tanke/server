@@ -1,9 +1,0 @@
-{
-    "admin_password": "admin123",
-    "available_states": [
-        "activo",
-        "inactivo",
-        "pendiente",
-        "bloqueado"
-    ]
-}
