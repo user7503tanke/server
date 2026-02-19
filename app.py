@@ -214,7 +214,7 @@ def validate_filename(filename):
     """
     # Verificar el patrón del nombre
     filename = filename.replace(" ", "")
-    pattern = r'^[a-zA-Z]+-\d{4}-\d{1,2}-\d{1,2}-(Dia|Noche|DIA|NOCHE|dia|noche)$'
+    pattern = r'^[a-zA-Z0-9]+-\d{4}-\d{1,2}-\d{1,2}-(Dia|Noche|DIA|NOCHE|dia|noche)$'
     if not re.match(pattern, filename):
         return False, f"Formato de nombre inválido. Debe ser: [apodo]-YYYY-MM-DD-Turno. Recibido: {filename}"
     
