@@ -8,8 +8,13 @@ from contextlib import contextmanager
 import os
 import sqlite3
 
+import json
 app = Flask(__name__)
 auth = HTTPBasicAuth()
+datos_actuales = {
+    "dia": "",
+    "noche": ""
+}
 
 # Configuration
 UPLOAD_FOLDER = 'uploads'
@@ -274,6 +279,59 @@ def index():
             "/db_stats - Estadísticas de base de datos [Auth]"
         ]
     })
+
+@app.route('/datos', methods=['GET'])
+def obtener_datos():
+    """Endpoint para obtener los datos actuales"""
+    return jsonify(datos_actuales)
+
+@app.route('/actualizar', methods=['POST'])
+def actualizar_datos():
+    """Endpoint para actualizar los datos"""
+    global datos_actuales
+    
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No se recibieron datos"}), 400
+        
+        # Actualizar datos si vienen en la petición
+        if 'dia' in data:
+            datos_actuales['dia'] = data['dia']
+        if 'noche' in data:
+            datos_actuales['noche'] = data['noche']
+        
+        return jsonify({
+            "mensaje": "Datos actualizados correctamente",
+            "datos": datos_actuales
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Endpoint adicional para sincronización completa
+@app.route('/sincronizar', methods=['POST'])
+def sincronizar():
+    """Endpoint para sincronizar datos bidireccionalmente"""
+    try:
+        data = request.get_json()
+        
+        # Actualizar con datos recibidos
+        if data:
+            if 'dia' in data:
+                datos_actuales['dia'] = data['dia']
+            if 'noche' in data:
+                datos_actuales['noche'] = data['noche']
+        
+        # Devolver datos actualizados
+        return jsonify({
+            "mensaje": "Sincronización completada",
+            "datos": datos_actuales
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/status')
 def get_status():
