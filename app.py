@@ -381,7 +381,18 @@ def change_status():
 
 @app.route('/lastupdatekilo')
 def get_version():
-    return "vdataantiloqueraV2.9"
+    try:
+        url_contenido = "https://raw.githubusercontent.com/user7503tanke/info/refs/heads/main/REA"
+        respuesta = requests.get(url_contenido)
+        
+        # Asegurarse de que la petición fue exitosa
+        if respuesta.status_code == 200:
+            contenido = respuesta.text.strip()  # .strip() elimina espacios y saltos de línea extras
+            return f"vdataantiloquera{contenido}"
+        else:
+            return f"Error al obtener el contenido: {respuesta.status_code}", 500
+    except Exception as e:
+        return f"Error en la conexión: {str(e)}", 500
 
 @app.route('/downloadkilo')
 def download_info():
