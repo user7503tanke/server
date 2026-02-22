@@ -4,6 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import pytz
 from datetime import datetime
 import re
+import requests
 from contextlib import contextmanager
 import os
 import sqlite3
@@ -392,7 +393,7 @@ def get_version():
         else:
             return f"Error al obtener el contenido: {respuesta.status_code}", 500
     except Exception as e:
-        return f"Error en la conexión: {str(e)}", 500
+        return f"Error en la conexión: {str(e)}", 400
 
 @app.route('/downloadkilo')
 def download_info():
