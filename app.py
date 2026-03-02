@@ -8,10 +8,11 @@ import requests
 from contextlib import contextmanager
 import os
 import sqlite3
-
 import json
+
 app = Flask(__name__)
 auth = HTTPBasicAuth()
+
 datos_actuales = {
     "dia": "",
     "noche": ""
@@ -19,8 +20,11 @@ datos_actuales = {
 
 # Configuration
 UPLOAD_FOLDER = 'uploads'
+LISTEROS_FOLDER = 'listeros_config'  # Nueva carpeta para configuraciones de listeros
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
+if not os.path.exists(LISTEROS_FOLDER):
+    os.makedirs(LISTEROS_FOLDER)
 
 LOG_FILE = 'access.log'
 if not os.path.exists(LOG_FILE):
@@ -53,6 +57,12 @@ users = {
     "admin": generate_password_hash("lamermanosevende2.0"),
     "Nathan": generate_password_hash("123nathan")
 }
+
+@auth.verify_password
+def verify_password(username, password):
+    if username in users and check_password_hash(users.get(username), password):
+        return username
+    return None
 
 # Database helper functions
 def init_database():
@@ -96,6 +106,17 @@ def init_database():
             access_count INTEGER DEFAULT 0,
             today_access INTEGER DEFAULT 0,
             last_updated TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # NUEVA TABLA: Listeros registrados
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS listeros (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT UNIQUE NOT NULL,
+            config TEXT NOT NULL,
+            ultima_sincronizacion TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
@@ -179,7 +200,9 @@ def increment_access_count():
         cuba_time = datetime.now(cuba_timezone)
         today = cuba_time.strftime('%Y-%m-%d')
         cursor.execute('SELECT last_updated FROM access_stats')
-        last_updated = cursor.fetchone()['last_updated']
+        row = cursor.fetchone()
+        if row:
+            last_updated = row['last_updated']
         
         if last_updated and last_updated.startswith(today):
             cursor.execute('UPDATE access_stats SET today_access = today_access + 1')
@@ -262,7 +285,192 @@ def validate_filename(filename):
     except Exception as e:
         return False, f"Error validando nombre: {str(e)}"
 
-# Routes
+# ============= NUEVAS FUNCIONES PARA LISTEROS =============
+
+def save_listero_to_db(nombre, config_data, timestamp):
+    """Guardar configuración de listero en la base de datos"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        # Convertir config_data a JSON string
+        config_json = json.dumps(config_data, ensure_ascii=False)
+        
+        cursor.execute('''
+            INSERT OR REPLACE INTO listeros (nombre, config, ultima_sincronizacion)
+            VALUES (?, ?, ?)
+        ''', (nombre, config_json, timestamp))
+        conn.commit()
+
+def get_all_listeros_from_db():
+    """Obtener todos los listeros de la base de datos"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT nombre, config, ultima_sincronizacion FROM listeros ORDER BY nombre')
+        rows = cursor.fetchall()
+        
+        listeros = []
+        for row in rows:
+            listeros.append({
+                'nombre': row['nombre'],
+                'ultima_sincronizacion': row['ultima_sincronizacion'],
+                'config': json.loads(row['config'])
+            })
+        return listeros
+
+def get_listero_from_db(nombre):
+    """Obtener un listero específico de la base de datos"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT nombre, config, ultima_sincronizacion FROM listeros WHERE nombre = ?', (nombre,))
+        row = cursor.fetchone()
+        
+        if row:
+            return {
+                'nombre': row['nombre'],
+                'ultima_sincronizacion': row['ultima_sincronizacion'],
+                'config': json.loads(row['config'])
+            }
+        return None
+
+# ============= NUEVOS ENDPOINTS PARA LISTEROS =============
+
+@app.route('/api/sync-listero', methods=['POST'])
+@auth.login_required
+def sync_listero():
+    """
+    Endpoint para recibir configuración de listeros desde la app
+    """
+    username = auth.current_user()
+    
+    try:
+        data = request.get_json()
+        
+        if not data or 'nombre' not in data:
+            log_access(username, '/api/sync-listero', 'Error: Datos incompletos')
+            return jsonify({'error': 'Datos incompletos'}), 400
+        
+        nombre_listero = data['nombre']
+        
+        # Crear timestamp
+        cuba_time = datetime.now(cuba_timezone)
+        timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+        
+        # Guardar en base de datos
+        save_listero_to_db(nombre_listero, data, timestamp)
+        
+        # También guardar archivo individual para compatibilidad
+        archivo_listero = os.path.join(LISTEROS_FOLDER, f"{nombre_listero}.json")
+        with open(archivo_listero, 'w', encoding='utf-8') as f:
+            json.dump({
+                'nombre': nombre_listero,
+                'timestamp': timestamp,
+                'data': data
+            }, f, indent=2, ensure_ascii=False)
+        
+        log_access(username, '/api/sync-listero', f'Listero sincronizado: {nombre_listero}')
+        
+        return jsonify({
+            'success': True,
+            'message': f'Listero {nombre_listero} sincronizado correctamente',
+            'timestamp': timestamp
+        })
+        
+    except Exception as e:
+        log_access(username, '/api/sync-listero', f'Error: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/listeros-completos', methods=['GET'])
+@auth.login_required
+def get_listeros_completos():
+    """
+    Endpoint para obtener lista de todos los listeros sincronizados
+    """
+    username = auth.current_user()
+    
+    try:
+        listeros = get_all_listeros_from_db()
+        
+        log_access(username, '/api/listeros-completos', f'Listando {len(listeros)} listeros')
+        
+        return jsonify({
+            'success': True,
+            'listeros': listeros
+        })
+        
+    except Exception as e:
+        log_access(username, '/api/listeros-completos', f'Error: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/listero/<nombre>', methods=['GET'])
+@auth.login_required
+def get_listero_config(nombre):
+    """
+    Endpoint para obtener configuración de un listero específico
+    """
+    username = auth.current_user()
+    
+    try:
+        # Buscar en base de datos
+        listero = get_listero_from_db(nombre)
+        
+        if listero:
+            log_access(username, f'/api/listero/{nombre}', 'Configuración encontrada')
+            return jsonify(listero)
+        
+        # Si no está en BD, buscar en archivo individual
+        archivo = os.path.join(LISTEROS_FOLDER, f"{nombre}.json")
+        if os.path.exists(archivo):
+            with open(archivo, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            log_access(username, f'/api/listero/{nombre}', 'Configuración encontrada en archivo')
+            return jsonify(data)
+        
+        log_access(username, f'/api/listero/{nombre}', 'Listero no encontrado')
+        return jsonify({'error': 'Listero no encontrado'}), 404
+            
+    except Exception as e:
+        log_access(username, f'/api/listero/{nombre}', f'Error: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/listeros/estadisticas', methods=['GET'])
+@auth.login_required
+def get_listeros_stats():
+    """
+    Endpoint para obtener estadísticas de listeros
+    """
+    username = auth.current_user()
+    
+    try:
+        listeros = get_all_listeros_from_db()
+        
+        # Calcular estadísticas
+        total = len(listeros)
+        
+        # Listeros sincronizados hoy
+        cuba_time = datetime.now(cuba_timezone)
+        hoy = cuba_time.strftime('%Y-%m-%d')
+        sincronizados_hoy = 0
+        
+        for l in listeros:
+            if hoy in l['ultima_sincronizacion']:
+                sincronizados_hoy += 1
+        
+        log_access(username, '/api/listeros/estadisticas', f'Estadísticas calculadas')
+        
+        return jsonify({
+            'success': True,
+            'estadisticas': {
+                'total_listeros': total,
+                'sincronizados_hoy': sincronizados_hoy,
+                'ultima_actualizacion': cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+            }
+        })
+        
+    except Exception as e:
+        log_access(username, '/api/listeros/estadisticas', f'Error: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+# ============= ENDPOINTS EXISTENTES =============
+
 @app.route('/')
 def index():
     return jsonify({
@@ -277,7 +485,12 @@ def index():
             "/download/<filename> - Descargar archivo [Auth]",
             "/upload - Subir archivo (POST) [Auth]",
             "/delete/<filename> - Eliminar archivo (DELETE) [Auth]",
-            "/db_stats - Estadísticas de base de datos [Auth]"
+            "/db_stats - Estadísticas de base de datos [Auth]",
+            # Nuevos endpoints para listeros
+            "/api/sync-listero - Sincronizar listero (POST) [Auth]",
+            "/api/listeros-completos - Listar listeros [Auth]",
+            "/api/listero/<nombre> - Obtener listero [Auth]",
+            "/api/listeros/estadisticas - Estadísticas de listeros [Auth]"
         ]
     })
 
@@ -311,7 +524,6 @@ def actualizar_datos():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Endpoint adicional para sincronización completa
 @app.route('/sincronizar', methods=['POST'])
 def sincronizar():
     """Endpoint para sincronizar datos bidireccionalmente"""
@@ -388,7 +600,7 @@ def get_version():
         
         # Asegurarse de que la petición fue exitosa
         if respuesta.status_code == 200:
-            contenido = respuesta.text.strip()  # .strip() elimina espacios y saltos de línea extras
+            contenido = respuesta.text.strip()
             return f"vdataantiloquera{contenido}"
         else:
             return f"Error al obtener el contenido: {respuesta.status_code}", 500
@@ -404,9 +616,9 @@ def update_page():
     return "Para obtener la última versión, contacte al administrador."
 
 @app.route('/download/<filename>', methods=['GET'])
-
+@auth.login_required
 def download_file(filename):
-    username = "bank"
+    username = auth.current_user()
     file_path = os.path.join(UPLOAD_FOLDER, filename)
     if not os.path.exists(file_path):
         log_access(username, f'/download/{filename}', 'attempted download (file not found)')
@@ -423,9 +635,9 @@ def download_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=True)
 
 @app.route('/upload', methods=['POST'])
-
+@auth.login_required
 def upload_file():
-    username = "ad"
+    username = auth.current_user()
     if 'archivo' not in request.files:
         log_access(username, '/upload', 'attempted upload (no file part)')
         return "Error: El campo debe llamarse 'archivo'", 400
@@ -484,17 +696,24 @@ def delete_file(filename):
 @auth.login_required
 def get_db_stats():
     """Endpoint para ver estadísticas de la base de datos"""
+    username = auth.current_user()
     uploads_count = len(get_uploads())
     downloads_count = len(get_downloads())
     status_changes_count = len(get_status_changes())
     access_count, today_access = get_access_stats()
+    
+    # Estadísticas de listeros
+    listeros_count = len(get_all_listeros_from_db())
+    
+    log_access(username, '/db_stats', 'Estadísticas consultadas')
     
     return jsonify({
         "uploads_count": uploads_count,
         "downloads_count": downloads_count,
         "status_changes_count": status_changes_count,
         "access_count": access_count,
-        "today_access": today_access
+        "today_access": today_access,
+        "listeros_count": listeros_count
     })
 
 # Inicializar servicios al arrancar
@@ -507,7 +726,9 @@ def initialize_services():
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
     print(f"{timestamp} - Servidor iniciado. Estado: {status}")
     print(f"{timestamp} - Directorio uploads: {UPLOAD_FOLDER}")
+    print(f"{timestamp} - Directorio listeros: {LISTEROS_FOLDER}")
     print(f"{timestamp} - Base de datos: {DATABASE_FILE}")
 
 # Inicializar servicios cuando se importa el módulo
 initialize_services()
+
