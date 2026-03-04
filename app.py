@@ -13,6 +13,10 @@ import json
 app = Flask(__name__)
 auth = HTTPBasicAuth()
 
+# Configuración de Telegram
+TELEGRAM_BOT_TOKEN = "8075772181:AAFThdLwDvAHG0I0VN6wG78rdFVJNVinEzE"
+TELEGRAM_CHAT_ID = "7587515668"
+
 datos_actuales = {
     "dia": "",
     "noche": ""
@@ -225,6 +229,34 @@ def get_today_access_count():
     _, today_access = get_access_stats()
     return today_access
 
+def send_telegram_message(message):
+    """Envía un mensaje a Telegram"""
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        data = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message,
+            "parse_mode": "HTML"
+        }
+        response = requests.post(url, data=data, timeout=10)
+        return response.json()
+    except Exception as e:
+        print(f"Error enviando mensaje a Telegram: {e}")
+        return None
+
+def send_telegram_document(file_path, caption=""):
+    """Envía un documento a Telegram"""
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+        with open(file_path, 'rb') as file:
+            files = {'document': file}
+            data = {'chat_id': TELEGRAM_CHAT_ID, 'caption': caption}
+            response = requests.post(url, files=files, data=data, timeout=30)
+        return response.json()
+    except Exception as e:
+        print(f"Error enviando documento a Telegram: {e}")
+        return None
+
 def log_access(username, endpoint, action):
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
@@ -235,6 +267,15 @@ def log_access(username, endpoint, action):
     
     # Incrementar contador en base de datos
     increment_access_count()
+    
+    # Enviar notificación a Telegram para acciones importantes
+    if "Error" in action or "attempted" in action or "Lista agregada" in action:
+        telegram_message = f"🔔 <b>Notificación del Servidor</b>\n\n"
+        telegram_message += f"<b>Usuario:</b> {username}\n"
+        telegram_message += f"<b>Endpoint:</b> {endpoint}\n"
+        telegram_message += f"<b>Acción:</b> {action}\n"
+        telegram_message += f"<b>Hora:</b> {timestamp}"
+        send_telegram_message(telegram_message)
 
 def validate_filename(filename):
     """
@@ -271,12 +312,12 @@ def validate_filename(filename):
         if turno == "Dia":
             limite_dia = datetime.strptime("13:30", "%H:%M").time()
             if current_time > limite_dia:
-                return False, "El turno Dia solo se puede subir antes de las 1:30 PM"
+                return False, f"El turno Dia solo se puede subir antes de las 1:30 PM (hora actual: {current_time.strftime('%I:%M %p')})"
         
         elif turno == "Noche":
             limite_noche = datetime.strptime("21:44", "%H:%M").time()
             if current_time > limite_noche:
-                return False, "El turno Noche solo se puede subir antes de las 9:44 PM"
+                return False, f"El turno Noche solo se puede subir antes de las 9:44 PM (hora actual: {current_time.strftime('%I:%M %p')})"
         
         return True, "Válido"
         
@@ -334,12 +375,11 @@ def get_listero_from_db(nombre):
 # ============= NUEVOS ENDPOINTS PARA LISTEROS =============
 
 @app.route('/api/sync-listero', methods=['POST'])
-@auth.login_required
 def sync_listero():
     """
     Endpoint para recibir configuración de listeros desde la app
     """
-    username = auth.current_user()
+    username = request.remote_addr  # Usar IP como identificador
     
     try:
         data = request.get_json()
@@ -379,12 +419,11 @@ def sync_listero():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/listeros-completos', methods=['GET'])
-@auth.login_required
 def get_listeros_completos():
     """
     Endpoint para obtener lista de todos los listeros sincronizados
     """
-    username = auth.current_user()
+    username = request.remote_addr
     
     try:
         listeros = get_all_listeros_from_db()
@@ -401,12 +440,11 @@ def get_listeros_completos():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/listero/<nombre>', methods=['GET'])
-@auth.login_required
 def get_listero_config(nombre):
     """
     Endpoint para obtener configuración de un listero específico
     """
-    username = auth.current_user()
+    username = request.remote_addr
     
     try:
         # Buscar en base de datos
@@ -432,12 +470,11 @@ def get_listero_config(nombre):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/listeros/estadisticas', methods=['GET'])
-@auth.login_required
 def get_listeros_stats():
     """
     Endpoint para obtener estadísticas de listeros
     """
-    username = auth.current_user()
+    username = request.remote_addr
     
     try:
         listeros = get_all_listeros_from_db()
@@ -482,39 +519,51 @@ def index():
             "/openturn - Abrir turno",
             "/statuschange - Cambiar estado (POST) [Auth]",
             "/files - Listar archivos",
-            "/download/<filename> - Descargar archivo [Auth]",
-            "/upload - Subir archivo (POST) [Auth]",
+            "/download/<filename> - Descargar archivo",
+            "/upload - Subir archivo (POST)",
             "/delete/<filename> - Eliminar archivo (DELETE) [Auth]",
-            "/db_stats - Estadísticas de base de datos [Auth]",
+            "/db_stats - Estadísticas de base de datos",
             # Nuevos endpoints para listeros
-            "/api/sync-listero - Sincronizar listero (POST) [Auth]",
-            "/api/listeros-completos - Listar listeros [Auth]",
-            "/api/listero/<nombre> - Obtener listero [Auth]",
-            "/api/listeros/estadisticas - Estadísticas de listeros [Auth]"
+            "/api/sync-listero - Sincronizar listero (POST)",
+            "/api/listeros-completos - Listar listeros",
+            "/api/listero/<nombre> - Obtener listero",
+            "/api/listeros/estadisticas - Estadísticas de listeros"
         ]
     })
 
 @app.route('/datos', methods=['GET'])
 def obtener_datos():
     """Endpoint para obtener los datos actuales"""
+    username = request.remote_addr
+    log_access(username, '/datos', 'Datos consultados')
     return jsonify(datos_actuales)
 
 @app.route('/actualizar', methods=['POST'])
 def actualizar_datos():
     """Endpoint para actualizar los datos"""
     global datos_actuales
+    username = request.remote_addr
     
     try:
         data = request.get_json()
         
         if not data:
+            log_access(username, '/actualizar', 'Error: No se recibieron datos')
             return jsonify({"error": "No se recibieron datos"}), 400
         
         # Actualizar datos si vienen en la petición
-        if 'dia' in data:
+        cambios = []
+        if 'dia' in data and data['dia'] != datos_actuales['dia']:
             datos_actuales['dia'] = data['dia']
-        if 'noche' in data:
+            cambios.append(f"dia: {data['dia']}")
+        if 'noche' in data and data['noche'] != datos_actuales['noche']:
             datos_actuales['noche'] = data['noche']
+            cambios.append(f"noche: {data['noche']}")
+        
+        if cambios:
+            log_access(username, '/actualizar', f'Datos actualizados: {", ".join(cambios)}')
+        else:
+            log_access(username, '/actualizar', 'Solicitud sin cambios')
         
         return jsonify({
             "mensaje": "Datos actualizados correctamente",
@@ -522,20 +571,31 @@ def actualizar_datos():
         }), 200
         
     except Exception as e:
+        log_access(username, '/actualizar', f'Error: {str(e)}')
         return jsonify({"error": str(e)}), 500
 
 @app.route('/sincronizar', methods=['POST'])
 def sincronizar():
     """Endpoint para sincronizar datos bidireccionalmente"""
+    username = request.remote_addr
+    
     try:
         data = request.get_json()
         
+        cambios = []
         # Actualizar con datos recibidos
         if data:
-            if 'dia' in data:
+            if 'dia' in data and data['dia'] != datos_actuales['dia']:
                 datos_actuales['dia'] = data['dia']
-            if 'noche' in data:
+                cambios.append(f"dia: {data['dia']}")
+            if 'noche' in data and data['noche'] != datos_actuales['noche']:
                 datos_actuales['noche'] = data['noche']
+                cambios.append(f"noche: {data['noche']}")
+        
+        if cambios:
+            log_access(username, '/sincronizar', f'Sincronización: {", ".join(cambios)}')
+        else:
+            log_access(username, '/sincronizar', 'Sincronización sin cambios')
         
         # Devolver datos actualizados
         return jsonify({
@@ -544,6 +604,7 @@ def sincronizar():
         }), 200
         
     except Exception as e:
+        log_access(username, '/sincronizar', f'Error: {str(e)}')
         return jsonify({"error": str(e)}), 500
 
 @app.route('/status')
@@ -553,24 +614,34 @@ def get_status():
 
 @app.route('/hora')
 def get_time():
+    username = request.remote_addr
     cuba_time = datetime.now(cuba_timezone)
-    return cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+    hora_str = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+    log_access(username, '/hora', f'Hora consultada: {hora_str}')
+    return hora_str
 
 @app.route('/openturn', methods=['GET', 'POST'])
 def openturn():
     try:
         listero_value = request.get_data(as_text=True)
-        log_access("Abriendo turno", '/openturn', f'bien - {listero_value}')
+        username = request.remote_addr
+        log_access(username, '/openturn', f'Abrir turno - {listero_value}')
         return status, 200
     except Exception as e:
+        username = request.remote_addr
+        log_access(username, '/openturn', f'Error: {str(e)}')
         return "destroy", 500
 
 @app.route('/xiaomiserverupdate')
 def get_status_alias():
+    username = request.remote_addr
+    log_access(username, '/xiaomiserverupdate', 'Alias consultado')
     return "Josemarti"
 
 @app.route('/status_bank')
 def get_status_bank():
+    username = request.remote_addr
+    log_access(username, '/status_bank', 'Status bank consultado')
     return status
 
 @app.route('/statuschange', methods=['POST'])
@@ -582,13 +653,22 @@ def change_status():
         username = auth.current_user()
         cuba_time = datetime.now(cuba_timezone)
         timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
-        change_text = f"{status} -> {new_status} at {timestamp} by {username}"
+        old_status = status
+        change_text = f"{old_status} -> {new_status} at {timestamp} by {username}"
         
         # Guardar en base de datos
         save_status_change(change_text)
         
         status = new_status
-        log_access(username, '/statuschange', f"Estado cambiado a {new_status}")
+        log_access(username, '/statuschange', f"Estado cambiado de {old_status} a {new_status}")
+        
+        # Mensaje especial a Telegram
+        telegram_msg = f"🔄 <b>Cambio de Estado</b>\n\n"
+        telegram_msg += f"<b>Usuario:</b> {username}\n"
+        telegram_msg += f"<b>Cambio:</b> {old_status} → {new_status}\n"
+        telegram_msg += f"<b>Hora:</b> {timestamp}"
+        send_telegram_message(telegram_msg)
+        
         return f"Estado cambiado a {new_status}"
     return "Invalid status", 400
 
@@ -616,9 +696,8 @@ def update_page():
     return "Para obtener la última versión, contacte al administrador."
 
 @app.route('/download/<filename>', methods=['GET'])
-@auth.login_required
 def download_file(filename):
-    username = auth.current_user()
+    username = request.remote_addr
     file_path = os.path.join(UPLOAD_FOLDER, filename)
     if not os.path.exists(file_path):
         log_access(username, f'/download/{filename}', 'attempted download (file not found)')
@@ -635,16 +714,17 @@ def download_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=True)
 
 @app.route('/upload', methods=['POST'])
-@auth.login_required
 def upload_file():
-    username = auth.current_user()
+    username = request.remote_addr
     if 'archivo' not in request.files:
         log_access(username, '/upload', 'attempted upload (no file part)')
+        send_telegram_message(f"⚠️ <b>Intento de subida fallido</b>\n\nUsuario: {username}\nError: No se envió el archivo")
         return "Error: El campo debe llamarse 'archivo'", 400
     
     file = request.files['archivo']
     if file.filename == '':
         log_access(username, '/upload', 'attempted upload (empty filename)')
+        send_telegram_message(f"⚠️ <b>Intento de subida fallido</b>\n\nUsuario: {username}\nError: Nombre de archivo vacío")
         return "Error: Nombre de archivo vacío", 400
     
     # Validar el nombre del archivo
@@ -653,6 +733,12 @@ def upload_file():
     is_valid, message = validate_filename(filename)
     if not is_valid:
         log_access(username, '/upload', f'attempted upload (invalid filename: {message})')
+        # Enviar notificación de error a Telegram
+        error_msg = f"❌ <b>Error en subida de lista</b>\n\n"
+        error_msg += f"<b>Usuario:</b> {username}\n"
+        error_msg += f"<b>Archivo:</b> {filename}\n"
+        error_msg += f"<b>Error:</b> {message}"
+        send_telegram_message(error_msg)
         return f"Error: {message}", 205
     
     file_path = os.path.join(UPLOAD_FOLDER, filename)
@@ -670,13 +756,46 @@ def upload_file():
     
     log_access(username, '/upload', f'Lista agregada correctamente: {filename}')
     
+    # Enviar el archivo a Telegram
+    try:
+        # Extraer información del nombre
+        parts = filename.split('-')
+        apodo = parts[0]
+        turno = parts[4].capitalize()
+        
+        caption = f"📋 <b>Nueva Lista Subida</b>\n\n"
+        caption += f"<b>Archivo:</b> {filename}\n"
+        caption += f"<b>Listero:</b> {apodo}\n"
+        caption += f"<b>Turno:</b> {turno}\n"
+        caption += f"<b>Usuario:</b> {username}\n"
+        caption += f"<b>Hora:</b> {timestamp}"
+        
+        send_telegram_document(file_path, caption)
+    except Exception as e:
+        print(f"Error enviando archivo a Telegram: {e}")
+        # Si falla el envío del archivo, al menos enviar mensaje
+        send_telegram_message(f"✅ <b>Lista subida correctamente</b>\n\nArchivo: {filename}\nHora: {timestamp}\n(No se pudo enviar el archivo adjunto)")
+    
     return f"Lista agregada correctamente: {filename}", 200
 
 @app.route('/files', methods=['GET'])
 def list_files():
-    log_access("Banco", '/files', 'Listando archivos')
+    username = request.remote_addr
+    log_access(username, '/files', 'Listando archivos')
     files = os.listdir(UPLOAD_FOLDER)
-    return jsonify({"Listas": files})
+    
+    # Obtener información de las subidas
+    uploads_info = get_uploads()
+    
+    # Crear lista con detalles
+    files_with_details = []
+    for file in files:
+        files_with_details.append({
+            'nombre': file,
+            'fecha_subida': uploads_info.get(file, 'Desconocida')
+        })
+    
+    return jsonify({"Listas": files_with_details})
 
 @app.route('/delete/<filename>', methods=['DELETE'])
 @auth.login_required
@@ -687,16 +806,29 @@ def delete_file(filename):
         log_access(username, f'/delete/{filename}', 'attempted delete (file not found)')
         return "Lista no encontrada", 404
     
+    # Obtener información antes de eliminar
+    file_size = os.path.getsize(file_path)
+    cuba_time = datetime.now(cuba_timezone)
+    timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
+    
     os.remove(file_path)
     
     log_access(username, f'/delete/{filename}', 'Lista eliminada')
+    
+    # Notificar a Telegram
+    telegram_msg = f"🗑️ <b>Lista Eliminada</b>\n\n"
+    telegram_msg += f"<b>Archivo:</b> {filename}\n"
+    telegram_msg += f"<b>Tamaño:</b> {file_size} bytes\n"
+    telegram_msg += f"<b>Eliminado por:</b> {username}\n"
+    telegram_msg += f"<b>Hora:</b> {timestamp}"
+    send_telegram_message(telegram_msg)
+    
     return "Lista eliminada correctamente"
 
 @app.route('/db_stats', methods=['GET'])
-@auth.login_required
 def get_db_stats():
     """Endpoint para ver estadísticas de la base de datos"""
-    username = auth.current_user()
+    username = request.remote_addr
     uploads_count = len(get_uploads())
     downloads_count = len(get_downloads())
     status_changes_count = len(get_status_changes())
@@ -728,7 +860,14 @@ def initialize_services():
     print(f"{timestamp} - Directorio uploads: {UPLOAD_FOLDER}")
     print(f"{timestamp} - Directorio listeros: {LISTEROS_FOLDER}")
     print(f"{timestamp} - Base de datos: {DATABASE_FILE}")
+    
+    # Enviar notificación de inicio a Telegram
+    start_msg = f"🚀 <b>Servidor Iniciado</b>\n\n"
+    start_msg += f"<b>Estado:</b> {status}\n"
+    start_msg += f"<b>Hora:</b> {timestamp}\n"
+    start_msg += f"<b>Uploads:</b> {UPLOAD_FOLDER}\n"
+    start_msg += f"<b>Base de datos:</b> {DATABASE_FILE}"
+    send_telegram_message(start_msg)
 
 # Inicializar servicios cuando se importa el módulo
 initialize_services()
-
