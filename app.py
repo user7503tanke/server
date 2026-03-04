@@ -778,25 +778,13 @@ def upload_file():
     
     return f"Lista agregada correctamente: {filename}", 200
 
+
 @app.route('/files', methods=['GET'])
 def list_files():
-    username = request.remote_addr
-    log_access(username, '/files', 'Listando archivos')
+    log_access("Banco", '/files', 'Listando archivos')
     files = os.listdir(UPLOAD_FOLDER)
+    return jsonify({"Listas": files})
     
-    # Obtener información de las subidas
-    uploads_info = get_uploads()
-    
-    # Crear lista con detalles
-    files_with_details = []
-    for file in files:
-        files_with_details.append({
-            'nombre': file,
-            'fecha_subida': uploads_info.get(file, 'Desconocida')
-        })
-    
-    return jsonify({"Listas": files_with_details})
-
 @app.route('/delete/<filename>', methods=['DELETE'])
 @auth.login_required
 def delete_file(filename):
