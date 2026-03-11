@@ -371,6 +371,74 @@ def get_listero_from_db(nombre):
                 'config': json.loads(row['config'])
             }
         return None
+        # ============= CONFIGURACIÓN PARA TIRADAS =============
+TIRADAS_FILE = 'tiradas.json'
+
+def load_tiradas():
+    """Carga las tiradas desde el archivo JSON"""
+    if os.path.exists(TIRADAS_FILE):
+        try:
+            with open(TIRADAS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_tiradas(tiradas):
+    """Guarda las tiradas en el archivo JSON"""
+    with open(TIRADAS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(tiradas, f, indent=2, ensure_ascii=False)
+
+# ============= ENDPOINTS PARA TIRADAS (SOLO LOS NECESARIOS) =============
+
+@app.route('/api/tirada/<turno>', methods=['GET'])
+def get_tirada(turno):
+    """Obtiene la tirada para un turno específico"""
+    username = request.remote_addr
+    tiradas = load_tiradas()
+    
+    if turno in tiradas:
+        log_access(username, f'/api/tirada/{turno}', 'Tirada obtenida')
+        return jsonify({
+            'turno': turno,
+            'tirada': tiradas[turno]
+        })
+    else:
+        log_access(username, f'/api/tirada/{turno}', 'Tirada no encontrada')
+        return jsonify({
+            'turno': turno,
+            'tirada': '0-00-00-00'  # Valor por defecto
+        })
+
+@app.route('/api/tirada/<turno>', methods=['POST'])
+def set_tirada(turno):
+    """Guarda o actualiza una tirada para un turno específico"""
+    username = request.remote_addr
+    
+    try:
+        data = request.get_json()
+        
+        if not data or 'tirada' not in data:
+            log_access(username, f'/api/tirada/{turno}', 'Error: Datos incompletos')
+            return jsonify({'error': 'Formato de datos incorrecto'}), 400
+        
+        tirada = data['tirada']
+        
+        tiradas = load_tiradas()
+        tiradas[turno] = tirada
+        save_tiradas(tiradas)
+        
+        log_access(username, f'/api/tirada/{turno}', f'Tirada guardada: {tirada}')
+        
+        return jsonify({
+            'mensaje': 'Tirada guardada correctamente',
+            'turno': turno,
+            'tirada': tirada
+        }), 200
+        
+    except Exception as e:
+        log_access(username, f'/api/tirada/{turno}', f'Error: {str(e)}')
+        return jsonify({'error': str(e)}), 500
 
 # ============= NUEVOS ENDPOINTS PARA LISTEROS =============
 
@@ -841,7 +909,8 @@ def initialize_services():
     """Inicializa todos los servicios al arrancar la aplicación"""
     # Inicializar base de datos
     init_database()
-    
+    # Cargar tiradas para verificar
+    tiradas = load_tiradas()
     cuba_time = datetime.now(cuba_timezone)
     timestamp = cuba_time.strftime('%Y-%m-%d %I:%M:%S %p')
     print(f"{timestamp} - Servidor iniciado. Estado: {status}")
