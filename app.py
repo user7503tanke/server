@@ -259,11 +259,16 @@ def validate_filename(filename):
         return False, f"Formato de nombre inválido. Debe ser: [Florida-|Georgia-][apodo]-YYYY-MM-DD-Turno. Recibido: {filename}"
     
     try:
-        # Quitar el prefijo opcional si existe para procesar el resto
+        # Detectar el prefijo (Florida o Georgia)
+        prefix = None
         base_filename = filename
-        if filename.startswith(('Florida-', 'Georgia-')):
-            # Encontrar la posición después del prefijo
-            prefix_end = filename.find('-') + 1
+        if filename.startswith('Florida-'):
+            prefix = 'Florida'
+            prefix_end = len('Florida-')
+            base_filename = filename[prefix_end:]
+        elif filename.startswith('Georgia-'):
+            prefix = 'Georgia'
+            prefix_end = len('Georgia-')
             base_filename = filename[prefix_end:]
         
         parts = base_filename.split('-')
@@ -280,14 +285,37 @@ def validate_filename(filename):
         if file_date.date() != current_date:
             return False, f"Solo se pueden subir listas del día actual. Fecha del archivo: {file_date.date()}, Hoy: {current_date}"
         
-        if turno == "Dia":
-            limite_dia = datetime.strptime("13:30", "%H:%M").time()
-            if current_time > limite_dia:
-                return False, f"El turno Dia solo se puede subir antes de las 1:30 PM (hora actual: {current_time.strftime('%I:%M %p')})"
-        elif turno == "Noche":
-            limite_noche = datetime.strptime("21:44", "%H:%M").time()
-            if current_time > limite_noche:
-                return False, f"El turno Noche solo se puede subir antes de las 9:44 PM (hora actual: {current_time.strftime('%I:%M %p')})"
+        # Validar horarios según el prefijo
+        if prefix == 'Florida':
+            if turno == "Dia":
+                limite_dia = datetime.strptime("13:30", "%H:%M").time()  # 1:30 PM
+                if current_time > limite_dia:
+                    return False, f"El turno Dia para Florida solo se puede subir antes de la 1:30 PM (hora actual: {current_time.strftime('%I:%M %p')})"
+            elif turno == "Noche":
+                limite_noche = datetime.strptime("21:40", "%H:%M").time()  # 9:40 PM
+                if current_time > limite_noche:
+                    return False, f"El turno Noche para Florida solo se puede subir antes de las 9:40 PM (hora actual: {current_time.strftime('%I:%M %p')})"
+        
+        elif prefix == 'Georgia':
+            if turno == "Dia":
+                limite_dia = datetime.strptime("12:25", "%H:%M").time()  # 12:25 PM
+                if current_time > limite_dia:
+                    return False, f"El turno Dia para Georgia solo se puede subir antes de las 12:25 PM (hora actual: {current_time.strftime('%I:%M %p')})"
+            elif turno == "Noche":
+                limite_noche = datetime.strptime("18:55", "%H:%M").time()  # 6:55 PM
+                if current_time > limite_noche:
+                    return False, f"El turno Noche para Georgia solo se puede subir antes de las 6:55 PM (hora actual: {current_time.strftime('%I:%M %p')})"
+        
+        else:
+            # Sin prefijo (comportamiento por defecto, ej: Florida)
+            if turno == "Dia":
+                limite_dia = datetime.strptime("13:30", "%H:%M").time()
+                if current_time > limite_dia:
+                    return False, f"El turno Dia solo se puede subir antes de las 1:30 PM (hora actual: {current_time.strftime('%I:%M %p')})"
+            elif turno == "Noche":
+                limite_noche = datetime.strptime("21:40", "%H:%M").time()
+                if current_time > limite_noche:
+                    return False, f"El turno Noche solo se puede subir antes de las 9:40 PM (hora actual: {current_time.strftime('%I:%M %p')})"
         
         return True, "Válido"
     except ValueError as e:
