@@ -253,12 +253,20 @@ def log_access(username, endpoint, action):
 
 def validate_filename(filename):
     filename = filename.replace(" ", "")
-    pattern = r'^[a-zA-Z0-9]+-\d{4}-\d{1,2}-\d{1,2}-(Dia|Noche|DIA|NOCHE|dia|noche)$'
+    # Patrón actualizado para permitir prefijos opcionales Florida- o Georgia-
+    pattern = r'^(?:Florida-|Georgia-)?[a-zA-Z0-9]+-\d{4}-\d{1,2}-\d{1,2}-(Dia|Noche|DIA|NOCHE|dia|noche)$'
     if not re.match(pattern, filename):
-        return False, f"Formato de nombre inválido. Debe ser: [apodo]-YYYY-MM-DD-Turno. Recibido: {filename}"
+        return False, f"Formato de nombre inválido. Debe ser: [Florida-|Georgia-][apodo]-YYYY-MM-DD-Turno. Recibido: {filename}"
     
     try:
-        parts = filename.split('-')
+        # Quitar el prefijo opcional si existe para procesar el resto
+        base_filename = filename
+        if filename.startswith(('Florida-', 'Georgia-')):
+            # Encontrar la posición después del prefijo
+            prefix_end = filename.find('-') + 1
+            base_filename = filename[prefix_end:]
+        
+        parts = base_filename.split('-')
         year = int(parts[1])
         month = int(parts[2])
         day = int(parts[3])
@@ -286,8 +294,7 @@ def validate_filename(filename):
         return False, f"Fecha inválida: {str(e)}"
     except Exception as e:
         return False, f"Error validando nombre: {str(e)}"
-
-# ============= FUNCIONES PARA LISTEROS =============
+        # ============= FUNCIONES PARA LISTEROS =============
 def save_listero_to_db(nombre, config_data, timestamp):
     with get_db_connection() as conn:
         cursor = conn.cursor()
