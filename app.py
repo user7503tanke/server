@@ -1130,4 +1130,4 @@ def initialize_services():
         logger.error(f"❌ Error inicializando servicios: {e}")
         raise
 
-    initialize_services()
+initialize_services()
