@@ -38,6 +38,7 @@ TURNOS_STATUS_FILE = 'turnos_status_server.json'
 for folder in [UPLOAD_FOLDER, LISTEROS_FOLDER]:
     if not os.path.exists(folder):
         os.makedirs(folder)
+        logger.info(f"Carpeta creada: {folder}")
 
 status = "redy"
 cuba_timezone = pytz.timezone('America/Havana')
@@ -75,7 +76,8 @@ def load_json_file(filename, default=None):
         try:
             with open(filename, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except:
+        except Exception as e:
+            logger.error(f"Error loading {filename}: {e}")
             return default
     return default
 
@@ -84,7 +86,8 @@ def save_json_file(filename, data):
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         return True
-    except:
+    except Exception as e:
+        logger.error(f"Error saving {filename}: {e}")
         return False
 
 @contextmanager
@@ -99,40 +102,58 @@ def get_db():
 # ==================== BASE DE DATOS ====================
 
 def init_database():
-    with get_db() as conn:
-        conn.execute('''CREATE TABLE IF NOT EXISTS uploads (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            filename TEXT UNIQUE NOT NULL,
-            timestamp TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )''')
-        conn.execute('''CREATE TABLE IF NOT EXISTS downloads (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            filename TEXT NOT NULL,
-            timestamp TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )''')
-        conn.execute('''CREATE TABLE IF NOT EXISTS listeros (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT UNIQUE NOT NULL,
-            config TEXT NOT NULL,
-            ultima_sincronizacion TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )''')
-        conn.execute('''CREATE TABLE IF NOT EXISTS status_changes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            change_text TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )''')
-        conn.execute('''CREATE TABLE IF NOT EXISTS access_stats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            access_count INTEGER DEFAULT 0,
-            today_access INTEGER DEFAULT 0,
-            last_updated TEXT DEFAULT CURRENT_TIMESTAMP
-        )''')
-        # Insertar acceso inicial si no existe
-        conn.execute('INSERT OR IGNORE INTO access_stats (access_count, today_access) VALUES (0, 0)')
-        conn.commit()
+    """Inicializa la base de datos con todas las tablas necesarias"""
+    try:
+        with get_db() as conn:
+            # Crear tabla uploads
+            conn.execute('''CREATE TABLE IF NOT EXISTS uploads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT UNIQUE NOT NULL,
+                timestamp TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )''')
+            
+            # Crear tabla downloads
+            conn.execute('''CREATE TABLE IF NOT EXISTS downloads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )''')
+            
+            # Crear tabla listeros
+            conn.execute('''CREATE TABLE IF NOT EXISTS listeros (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT UNIQUE NOT NULL,
+                config TEXT NOT NULL,
+                ultima_sincronizacion TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )''')
+            
+            # Crear tabla status_changes
+            conn.execute('''CREATE TABLE IF NOT EXISTS status_changes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                change_text TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )''')
+            
+            # Crear tabla access_stats
+            conn.execute('''CREATE TABLE IF NOT EXISTS access_stats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                access_count INTEGER DEFAULT 0,
+                today_access INTEGER DEFAULT 0,
+                last_updated TEXT DEFAULT CURRENT_TIMESTAMP
+            )''')
+            
+            # Insertar acceso inicial si no existe
+            conn.execute('INSERT OR IGNORE INTO access_stats (id, access_count, today_access) VALUES (1, 0, 0)')
+            
+            conn.commit()
+            logger.info("✅ Base de datos inicializada correctamente")
+            
+    except Exception as e:
+        logger.error(f"❌ Error inicializando base de datos: {e}")
+        raise
 
 # ==================== TELEGRAM ====================
 
@@ -144,9 +165,13 @@ def send_telegram_message(message):
             "text": message,
             "parse_mode": "HTML"
         }, timeout=10)
+        if response.status_code == 200:
+            logger.info("✅ Mensaje enviado a Telegram")
+        else:
+            logger.error(f"❌ Error enviando mensaje: {response.status_code}")
         return response.json()
     except Exception as e:
-        logger.error(f"Telegram error: {e}")
+        logger.error(f"❌ Telegram error: {e}")
         return None
 
 def send_telegram_document(file_path, caption=""):
@@ -157,7 +182,7 @@ def send_telegram_document(file_path, caption=""):
                                    data={'chat_id': TELEGRAM_CHAT_ID, 'caption': caption}, timeout=30)
         return response.json()
     except Exception as e:
-        logger.error(f"Telegram document error: {e}")
+        logger.error(f"❌ Telegram document error: {e}")
         return None
 
 # ==================== LOGGING ====================
@@ -166,8 +191,11 @@ def log_access(username, endpoint, action):
     cuba_time = get_cuba_time()
     timestamp = format_timestamp(cuba_time)
     
-    with open(LOG_FILE, 'a', encoding='utf-8') as f:
-        f.write(f"{timestamp} - {username} - {endpoint} - {action}\n")
+    try:
+        with open(LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(f"{timestamp} - {username} - {endpoint} - {action}\n")
+    except Exception as e:
+        logger.error(f"Error writing log: {e}")
     
     if any(k in action for k in ["Error", "attempted", "Lista agregada", "Eliminada"]):
         send_telegram_message(f"🔔 <b>Notificación</b>\n\n<b>Usuario:</b> {username}\n<b>Endpoint:</b> {endpoint}\n<b>Acción:</b> {action}\n<b>Hora:</b> {timestamp}")
@@ -484,8 +512,11 @@ def ejecutar_bote(turno):
         send_telegram_message(mensaje)
         
         # Guardar en archivo de log
-        with open(BOTE_LOG_FILE, 'a', encoding='utf-8') as f:
-            f.write(f"{format_timestamp(cuba_now)} - BOTE {turno}: {json.dumps(resultado)}\n")
+        try:
+            with open(BOTE_LOG_FILE, 'a', encoding='utf-8') as f:
+                f.write(f"{format_timestamp(cuba_now)} - BOTE {turno}: {json.dumps(resultado)}\n")
+        except:
+            pass
         
         logger.info(f"BOTE {turno} ejecutado: {resultado['total_a_botar']}")
         
@@ -641,9 +672,16 @@ def upload_file():
     file.save(file_path)
     
     timestamp = format_timestamp(get_cuba_time())
-    with get_db() as conn:
-        conn.execute('INSERT OR REPLACE INTO uploads (filename, timestamp) VALUES (?, ?)', (filename, timestamp))
-        conn.commit()
+    
+    # Guardar en base de datos
+    try:
+        with get_db() as conn:
+            conn.execute('INSERT OR REPLACE INTO uploads (filename, timestamp) VALUES (?, ?)', (filename, timestamp))
+            conn.commit()
+            logger.info(f"✅ Archivo guardado en BD: {filename}")
+    except Exception as e:
+        logger.error(f"❌ Error guardando en BD: {e}")
+        # Continuar aunque falle la BD
     
     log_access(username, '/upload', f'Lista agregada correctamente: {filename}')
     
@@ -653,7 +691,8 @@ def upload_file():
         turno = parts[4].capitalize()
         caption = f"📋 <b>Nueva Lista Subida</b>\n\n<b>Archivo:</b> {filename}\n<b>Listero:</b> {apodo}\n<b>Turno:</b> {turno}\n<b>Usuario:</b> {username}\n<b>Hora:</b> {timestamp}"
         send_telegram_document(file_path, caption)
-    except:
+    except Exception as e:
+        logger.error(f"Error enviando a Telegram: {e}")
         send_telegram_message(f"✅ <b>Lista subida</b>\n\nArchivo: {filename}\nHora: {timestamp}")
     
     return f"Lista agregada correctamente: {filename}", 200
@@ -664,8 +703,8 @@ def list_files():
     try:
         files = os.listdir(UPLOAD_FOLDER)
         return jsonify({"Listas": files})
-    except:
-        return jsonify({"error": "Error al listar archivos"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Error al listar archivos: {str(e)}"}), 500
 
 @app.route('/download/<filename>', methods=['GET'])
 def download_file(filename):
@@ -677,9 +716,13 @@ def download_file(filename):
         return "Archivo no encontrado", 404
     
     timestamp = format_timestamp(get_cuba_time())
-    with get_db() as conn:
-        conn.execute('INSERT INTO downloads (filename, timestamp) VALUES (?, ?)', (filename, timestamp))
-        conn.commit()
+    
+    try:
+        with get_db() as conn:
+            conn.execute('INSERT INTO downloads (filename, timestamp) VALUES (?, ?)', (filename, timestamp))
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Error guardando download: {e}")
     
     log_access(username, f'/download/{filename}', f'Descargando lista: {filename}')
     return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=True)
@@ -695,6 +738,14 @@ def delete_file(filename):
         return "Lista no encontrada", 404
     
     os.remove(file_path)
+    
+    try:
+        with get_db() as conn:
+            conn.execute('DELETE FROM uploads WHERE filename = ?', (filename,))
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Error eliminando de BD: {e}")
+    
     log_access(username, f'/delete/{filename}', 'Lista eliminada')
     send_telegram_message(f"🗑️ <b>Lista Eliminada</b>\n\nArchivo: {filename}\nUsuario: {username}")
     return "Lista eliminada correctamente"
@@ -1027,17 +1078,20 @@ def update_page():
 @app.route('/db_stats', methods=['GET'])
 def get_db_stats():
     username = request.remote_addr
-    with get_db() as conn:
-        uploads = conn.execute('SELECT COUNT(*) FROM uploads').fetchone()[0]
-        downloads = conn.execute('SELECT COUNT(*) FROM downloads').fetchone()[0]
-        listeros = conn.execute('SELECT COUNT(*) FROM listeros').fetchone()[0]
-    
-    log_access(username, '/db_stats', 'Estadísticas consultadas')
-    return jsonify({
-        "uploads_count": uploads,
-        "downloads_count": downloads,
-        "listeros_count": listeros
-    })
+    try:
+        with get_db() as conn:
+            uploads = conn.execute('SELECT COUNT(*) FROM uploads').fetchone()[0]
+            downloads = conn.execute('SELECT COUNT(*) FROM downloads').fetchone()[0]
+            listeros = conn.execute('SELECT COUNT(*) FROM listeros').fetchone()[0]
+        
+        log_access(username, '/db_stats', 'Estadísticas consultadas')
+        return jsonify({
+            "uploads_count": uploads,
+            "downloads_count": downloads,
+            "listeros_count": listeros
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ==================== ERROR HANDLERS ====================
 
@@ -1052,18 +1106,28 @@ def internal_error(error):
 # ==================== INIT ====================
 
 def initialize_services():
-    init_database()
-    
-    for file in [TIRADAS_FILE, CONFIG_FILE, TURNOS_STATUS_FILE]:
-        if not os.path.exists(file):
-            save_json_file(file, {})
-    
-    # Iniciar scheduler
-    iniciar_scheduler()
-    
-    timestamp = format_timestamp(get_cuba_time())
-    logger.info(f"{timestamp} - Servidor iniciado. Estado: {status}")
-    
-    send_telegram_message(f"🚀 <b>Servidor Iniciado</b>\n\n<b>Estado:</b> {status}\n<b>Hora:</b> {timestamp}")
+    """Inicializa todos los servicios"""
+    try:
+        # Inicializar base de datos
+        init_database()
+        logger.info("✅ Base de datos inicializada")
+        
+        # Crear archivos JSON si no existen
+        for file in [TIRADAS_FILE, CONFIG_FILE, TURNOS_STATUS_FILE]:
+            if not os.path.exists(file):
+                save_json_file(file, {})
+                logger.info(f"✅ Archivo creado: {file}")
+        
+        # Iniciar scheduler
+        iniciar_scheduler()
+        
+        timestamp = format_timestamp(get_cuba_time())
+        logger.info(f"✅ Servidor iniciado. Estado: {status}")
+        
+        send_telegram_message(f"🚀 <b>Servidor Iniciado</b>\n\n<b>Estado:</b> {status}\n<b>Hora:</b> {timestamp}")
+        
+    except Exception as e:
+        logger.error(f"❌ Error inicializando servicios: {e}")
+        raise
 
     initialize_services()
