@@ -499,7 +499,7 @@ def scheduler_loop():
                 time.sleep(60)
                 
             # BOTE NOCHE - 9:25 PM
-            elif hora_actual == '16:27' and ultimo_noche != fecha_actual:
+            elif hora_actual == '16:34' and ultimo_noche != fecha_actual:
                 logger.info(f"🕐 Ejecutando BOTE NOCHE (9:25 PM) - Fecha: {fecha_actual}")
                 ejecutar_bote('Noche')
                 ultimo_noche = fecha_actual
