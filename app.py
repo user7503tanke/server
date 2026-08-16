@@ -492,14 +492,14 @@ def scheduler_loop():
             fecha_actual = now.strftime('%Y-%m-%d')
             
             # BOTE DIA - 1:20 PM
-            if hora_actual == '16:26' and ultimo_dia != fecha_actual:
+            if hora_actual == '13:21' and ultimo_dia != fecha_actual:
                 logger.info(f"🕐 Ejecutando BOTE DIA (1:20 PM) - Fecha: {fecha_actual}")
                 ejecutar_bote('Dia')
                 ultimo_dia = fecha_actual
                 time.sleep(60)
                 
             # BOTE NOCHE - 9:25 PM
-            elif hora_actual == '21:25' and ultimo_noche != fecha_actual:
+            elif hora_actual == '16:27' and ultimo_noche != fecha_actual:
                 logger.info(f"🕐 Ejecutando BOTE NOCHE (9:25 PM) - Fecha: {fecha_actual}")
                 ejecutar_bote('Noche')
                 ultimo_noche = fecha_actual
