@@ -282,7 +282,7 @@ def upload_file():
     is_valid, message = validate_filename(filename)
     
     if not is_valid:
-        log_access(username, '/upload', f'attempted upload (invalid filename: {message})')
+       # log_access(username, '/upload', f'attempted upload (invalid filename: {message})')
         send_telegram_message(f"❌ <b>Error en subida</b>\n\n<b>Usuario:</b> {username}\n<b>Archivo:</b> {filename}\n<b>Error:</b> {message}")
         return f"Error: {message}", 205
     
@@ -296,12 +296,12 @@ def upload_file():
         conn.execute('INSERT OR REPLACE INTO uploads (filename, timestamp) VALUES (?, ?)', (filename, timestamp))
         conn.commit()
     
-    log_access(username, '/upload', f'Lista agregada correctamente: {filename}')
+   # log_access(username, '/upload', f'Lista agregada correctamente: {filename}')
     
     try:
         parts = filename.split('-')
-        apodo = parts[0]
-        turno = parts[4].capitalize()
+        apodo = parts[1]
+        turno = parts[5].capitalize()
         caption = f"📋 <b>Nueva Lista Subida</b>\n\n<b>Archivo:</b> {filename}\n<b>Listero:</b> {apodo}\n<b>Turno:</b> {turno}\n<b>Usuario:</b> {username}\n<b>Hora:</b> {timestamp}"
         send_telegram_document(file_path, caption)
     except:
@@ -332,7 +332,7 @@ def download_file(filename):
         conn.execute('INSERT INTO downloads (filename, timestamp) VALUES (?, ?)', (filename, timestamp))
         conn.commit()
     
-    log_access(username, f'/download/{filename}', f'Descargando lista: {filename}')
+    #log_access(username, f'/download/{filename}', f'Descargando lista: {filename}')
     return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=True)
 
 # ==================== LISTEROS ====================
