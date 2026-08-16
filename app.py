@@ -10,19 +10,12 @@ import os
 import sqlite3
 import json
 import logging
-import threading
-import time
-import hashlib
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import unpad
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 auth = HTTPBasicAuth()
-
-# ==================== CONFIGURACIÓN ====================
 
 TELEGRAM_BOT_TOKEN = "8075772181:AAFThdLwDvAHG0I0VN6wG78rdFVJNVinEzE"
 TELEGRAM_CHAT_ID = "7587515668"
@@ -33,14 +26,9 @@ DATABASE_FILE = 'lists_database.db'
 LOG_FILE = 'access.log'
 TIRADAS_FILE = 'tiradas.json'
 CONFIG_FILE = 'config_server.json'
-BOTE_LOG_FILE = 'bote_log.txt'
-
-# LA MISMA CLAVE SECRETA QUE USAS EN B4A
-SECRET = "24bfa0467fa3974cda5bae803299d2858a20043c2f65a24df98ebdce518a5f47"
 
 for folder in [UPLOAD_FOLDER, LISTEROS_FOLDER]:
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    os.makedirs(folder, exist_ok=True)
 
 status = "redy"
 cuba_timezone = pytz.timezone('America/Havana')
@@ -55,15 +43,11 @@ users = {
     "newyork": generate_password_hash("newyork4507")
 }
 
-# ==================== AUTENTICACIÓN ====================
-
 @auth.verify_password
 def verify_password(username, password):
     if username in users and check_password_hash(users.get(username), password):
         return username
     return None
-
-# ==================== UTILIDADES ====================
 
 def get_cuba_time():
     return datetime.now(cuba_timezone)
@@ -120,21 +104,7 @@ def init_database():
             ultima_sincronizacion TEXT NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )''')
-        conn.execute('''CREATE TABLE IF NOT EXISTS status_changes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            change_text TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )''')
-        conn.execute('''CREATE TABLE IF NOT EXISTS access_stats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            access_count INTEGER DEFAULT 0,
-            today_access INTEGER DEFAULT 0,
-            last_updated TEXT DEFAULT CURRENT_TIMESTAMP
-        )''')
-        conn.execute('INSERT OR IGNORE INTO access_stats (id, access_count, today_access) VALUES (1, 0, 0)')
         conn.commit()
-
-# ==================== TELEGRAM ====================
 
 def send_telegram_message(message):
     try:
@@ -160,328 +130,57 @@ def send_telegram_document(file_path, caption=""):
         logger.error(f"Telegram document error: {e}")
         return None
 
-# ==================== DESENCRIPTACIÓN B4A ====================
+def log_access(username, endpoint, action):
+    cuba_time = get_cuba_time()
+    timestamp = format_timestamp(cuba_time)
+    
+    with open(LOG_FILE, 'a', encoding='utf-8') as f:
+        f.write(f"{timestamp} - {username} - {endpoint} - {action}\n")
+    
+    if any(k in action for k in ["Error", "attempted", "Lista agregada", "Eliminada"]):
+        send_telegram_message(f"🔔 <b>Notificación</b>\n\n<b>Usuario:</b> {username}\n<b>Endpoint:</b> {endpoint}\n<b>Acción:</b> {action}\n<b>Hora:</b> {timestamp}")
 
-def decrypt_b4a_list(data):
-    """
-    Desencripta una lista encriptada con RandomAccessFile de B4A
-    """
+def validate_filename(filename):
+    filename = filename.replace(" ", "")
+    pattern = r'^(?:Florida-|Georgia-)?[a-zA-Z0-9]+-\d{4}-\d{1,2}-\d{1,2}-(Dia|Noche|DIA|NOCHE|dia|noche)$'
+    
+    if not re.match(pattern, filename):
+        return False, f"Formato inválido. Debe ser: [Florida-|Georgia-][apodo]-YYYY-MM-DD-Turno"
+    
     try:
-        # La clave se deriva de "lista:" + SECRET
-        key = f"lista:{SECRET}"
+        prefix = None
+        base_filename = filename
+        for p in ['Florida-', 'Georgia-']:
+            if filename.startswith(p):
+                prefix = p[:-1]
+                base_filename = filename[len(p):]
+                break
         
-        # MD5 de la clave (como hace B4A)
-        md5 = hashlib.md5()
-        md5.update(key.encode('utf-8'))
-        derived_key = md5.digest()
+        parts = base_filename.split('-')
+        year, month, day = int(parts[1]), int(parts[2]), int(parts[3])
+        turno = parts[4].capitalize()
         
-        # AES ECB (B4A usa ECB)
-        cipher = AES.new(derived_key, AES.MODE_ECB)
+        file_date = datetime(year, month, day).date()
+        cuba_now = get_cuba_time()
         
-        # Desencriptar
-        decrypted = unpad(cipher.decrypt(data), AES.block_size)
+        if file_date != cuba_now.date():
+            return False, f"Solo se permiten listas del día actual"
         
-        # Convertir a string
-        json_str = decrypted.decode('utf-8')
+        limits = {
+            'Florida': {'Dia': '13:30', 'Noche': '21:40'},
+            'Georgia': {'Dia': '12:25', 'Noche': '18:55'},
+            None: {'Dia': '13:30', 'Noche': '21:40'}
+        }
         
-        # Parsear JSON
-        return json.loads(json_str)
+        key = prefix if prefix in limits else None
+        limit_time = datetime.strptime(limits[key][turno], "%H:%M").time()
         
+        if cuba_now.time() > limit_time:
+            return False, f"Horario límite para {turno} {prefix or 'Florida'}: {limits[key][turno]}"
+        
+        return True, "Válido"
     except Exception as e:
-        logger.error(f"Error desencriptando: {e}")
-        return None
-
-def leer_lista(archivo_path):
-    """
-    Lee una lista desde el archivo, desencriptando si es necesario
-    """
-    try:
-        with open(archivo_path, 'rb') as f:
-            data = f.read()
-        
-        # Intentar desencriptar (formato B4A)
-        lista = decrypt_b4a_list(data)
-        if lista:
-            return lista
-        
-        # Si no se pudo desencriptar, intentar leer como JSON plano
-        with open(archivo_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-            
-    except Exception as e:
-        logger.error(f"Error leyendo archivo {archivo_path}: {e}")
-        return None
-
-# ==================== PARSING DE JUGADAS ====================
-
-def parse_bola(jugada):
-    """Parsea una jugada de BOLA"""
-    if not jugada:
-        return None
-    
-    jugada = jugada.strip()
-    
-    patrones = [
-        r'^[0-9]{2}-\([0-9\.]+\)$',
-        r'^[0-9]{2}-X-\([0-9\.]+\)$',
-        r'^[0-9]{2}-\([0-9\.]+\)-\([0-9\.]+\)$',
-        r'^\(00\)-\([0-9\.]+\)$',
-        r'^\(00\)-X-\([0-9\.]+\)$',
-        r'^\(00\)-\([0-9\.]+\)-\([0-9\.]+\)$',
-        r'^00-AL-99-\([0-9\.]+\)$',
-        r'^00-AL-99-X-\([0-9\.]+\)$',
-        r'^00-AL-99-\([0-9\.]+\)-\([0-9\.]+\)$',
-        r'^\(0\)-\([0-9\.]+\)$',
-        r'^\(0\)-X-\([0-9\.]+\)$',
-        r'^\(0\)-\([0-9\.]+\)-\([0-9\.]+\)$',
-        r'^00-AL-90-\([0-9\.]+\)$',
-        r'^00-AL-90-X-\([0-9\.]+\)$',
-        r'^00-AL-90-\([0-9\.]+\)-\([0-9\.]+\)$',
-        r'^\([1-9]0\)-\([0-9\.]+\)$',
-        r'^\([1-9]0\)-X-\([0-9\.]+\)$',
-        r'^\([1-9]0\)-\([0-9\.]+\)-\([0-9\.]+\)$',
-        r'^\(0[1-9]\)-\([0-9\.]+\)$',
-        r'^\(0[1-9]\)-X-\([0-9\.]+\)$',
-        r'^\(0[1-9]\)-\([0-9\.]+\)-\([0-9\.]+\)$',
-        r'^00-AL-09-\([0-9\.]+\)$',
-        r'^00-AL-09-X-\([0-9\.]+\)$',
-        r'^00-AL-09-\([0-9\.]+\)-\([0-9\.]+\)$'
-    ]
-    
-    valid = False
-    for patron in patrones:
-        if re.match(patron, jugada):
-            valid = True
-            break
-    
-    if not valid:
-        return None
-    
-    parts = jugada.split('-')
-    fijo = 0.0
-    corrido = 0.0
-    
-    try:
-        if len(parts) == 2 or len(parts) == 4:
-            fijo = float(parts[-1].replace('(', '').replace(')', ''))
-        elif len(parts) == 3 or len(parts) == 5:
-            if parts[-2] != 'X':
-                fijo = float(parts[-2].replace('(', '').replace(')', ''))
-            corrido = float(parts[-1].replace('(', '').replace(')', ''))
-    except:
-        return None
-    
-    if fijo == 0 and corrido == 0:
-        return None
-    
-    numeros = []
-    if jugada.startswith('(00)') or jugada.startswith('00-AL-99'):
-        numeros = [0, 11, 22, 33, 44, 55, 66, 77, 88, 99]
-    elif jugada.startswith('(0)') or jugada.startswith('00-AL-90'):
-        numeros = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
-    elif jugada.startswith('(0') and len(jugada) > 2 and jugada[2] != ')' and jugada[2] != '-':
-        n = jugada[2]
-        numeros = [int(f"{i}{n}") for i in range(10)]
-    elif jugada.startswith('00-AL-09'):
-        numeros = list(range(10))
-    elif jugada.startswith('(') and len(jugada) >= 3 and jugada[2] == '0':
-        n = jugada[1]
-        numeros = [int(f"{n}{i}") for i in range(10)]
-    elif parts[0].isdigit():
-        numeros = [int(parts[0])]
-    else:
-        return None
-    
-    return {
-        'valid': True,
-        'numeros': numeros,
-        'fijo': fijo,
-        'corrido': corrido,
-        'total_fijo': fijo * len(numeros),
-        'total_corrido': corrido * len(numeros)
-    }
-
-def parse_config(config_str):
-    """Parsea la configuración de un listero"""
-    if not config_str:
-        return None
-    
-    parts = config_str.split('\n')
-    if len(parts) < 2:
-        return None
-    
-    config_data = parts[0].split('|')
-    result = {}
-    
-    props = [
-        'Banco', 'Listero', 'MontoMaximoCopaoBola', 'MontoMaximoBola', 
-        'PorcientoListeroBola', 'PagoFijo', 'PagoCorrido', 
-        'MontoMaximoParlay', 'PorcientoListeroParlay', 'PagoParlay',
-        'MontoMaximoCentena', 'PorcientoListeroCentena', 'PagoCentena',
-        'BloqueoDiaDesde', 'BloqueoDiaHasta', 'BloqueoNocheDesde', 'BloqueoNocheHasta'
-    ]
-    
-    for i, prop in enumerate(props):
-        if i < len(config_data):
-            try:
-                result[prop] = float(config_data[i]) if i > 1 else config_data[i]
-            except:
-                result[prop] = config_data[i]
-    
-    return result
-
-def ordenar_por_monto(montos_dict):
-    return sorted(montos_dict.items(), key=lambda x: x[1], reverse=True)
-
-# ==================== CÁLCULO DE BOTE ====================
-
-def calcular_bote(turno, fecha):
-    """Calcula el bote para un turno y fecha"""
-    resultado = {
-        'exito': False,
-        'mensaje': '',
-        'total_a_botar': 0,
-        'detalle': '',
-        'bruto': 0,
-        'limpio': 0,
-        'listeros': 0,
-        'archivos': []
-    }
-    
-    try:
-        archivos = []
-        for f in os.listdir(UPLOAD_FOLDER):
-            if fecha in f and turno in f:
-                archivos.append(f)
-                logger.info(f"📄 Archivo encontrado: {f}")
-        
-        if not archivos:
-            resultado['mensaje'] = f"No hay listas para {fecha}-{turno}"
-            return resultado
-        
-        resultado['archivos'] = archivos
-        montos_fijo = {}
-        bruto_total = 0.0
-        limpio_total = 0.0
-        
-        for filename in archivos:
-            file_path = os.path.join(UPLOAD_FOLDER, filename)
-            
-            lista = leer_lista(file_path)
-            if not lista:
-                continue
-            
-            bola = lista.get('bola', [])
-            config_str = lista.get('configstr', '')
-            
-            if not bola:
-                continue
-            
-            conf = parse_config(config_str)
-            if not conf:
-                conf = {'PorcientoListeroBola': 0}
-            
-            resultado['listeros'] += 1
-            bruto_listero = 0.0
-            
-            for jugada in bola:
-                parsed = parse_bola(jugada)
-                if parsed and parsed['valid']:
-                    bruto_listero += parsed['total_fijo'] + parsed['total_corrido']
-                    
-                    if parsed['fijo'] > 0:
-                        for num in parsed['numeros']:
-                            montos_fijo[num] = montos_fijo.get(num, 0) + parsed['fijo']
-            
-            bruto_total += bruto_listero
-            porciento = conf.get('PorcientoListeroBola', 0)
-            limpio_total += bruto_listero * (1 - porciento / 100)
-            
-            logger.info(f"💰 {filename}: Bruto=${bruto_listero:.2f}")
-        
-        total_bote = 0
-        detalle = []
-        
-        if montos_fijo:
-            sorted_montos = ordenar_por_monto(montos_fijo)
-            limite = (limpio_total * 2) / 80 if limpio_total > 0 else 0
-            
-            for num, monto in sorted_montos[:20]:
-                monto_bote = monto - limite
-                if monto_bote > 0:
-                    monto_a_botar = round(monto_bote / 2)
-                    total_bote += monto_a_botar
-                    detalle.append(f"{num:02d} con {monto_a_botar:,.0f}")
-        
-        resultado['exito'] = True
-        resultado['bruto'] = round(bruto_total, 2)
-        resultado['limpio'] = round(limpio_total, 2)
-        resultado['total_a_botar'] = total_bote
-        resultado['detalle'] = '\n'.join(detalle) if detalle else 'No hay jugadas fijas'
-        
-        return resultado
-        
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        resultado['mensaje'] = str(e)
-        return resultado
-
-# ==================== SCHEDULER ====================
-
-def ejecutar_bote(turno):
-    try:
-        ahora = get_cuba_time()
-        fecha = ahora.strftime('%Y-%m-%d')
-        resultado = calcular_bote(turno, fecha)
-        
-        if resultado['exito']:
-            mensaje = f"""🎯 <b>BOTE {turno.upper()}</b>
-📅 {fecha} - {format_timestamp(ahora)}
-
-💰 <b>Total: {resultado['total_a_botar']:,.0f}</b>
-📊 Bruto: ${resultado['bruto']:,.2f}
-🧹 Limpio: ${resultado['limpio']:,.2f}
-📋 Listeros: {resultado['listeros']}
-📁 Archivos: {len(resultado.get('archivos', []))}
-
-📋 {resultado['detalle']}"""
-        else:
-            mensaje = f"⚠️ Error BOTE {turno}: {resultado['mensaje']}"
-        
-        send_telegram_message(mensaje)
-        logger.info(f"✅ BOTE {turno}: {resultado['total_a_botar']}")
-        
-    except Exception as e:
-        logger.error(f"Error: {e}")
-
-def scheduler():
-    ultimo_dia = None
-    ultima_noche = None
-    
-    while True:
-        try:
-            ahora = get_cuba_time()
-            hora = ahora.strftime('%H:%M')
-            fecha = ahora.strftime('%Y-%m-%d')
-            
-            if hora == '13:20' and ultimo_dia != fecha:
-                ejecutar_bote('Dia')
-                ultimo_dia = fecha
-                time.sleep(60)
-            elif hora == '21:25' and ultima_noche != fecha:
-                ejecutar_bote('Noche')
-                ultima_noche = fecha
-                time.sleep(60)
-            
-            time.sleep(30)
-        except Exception as e:
-            logger.error(f"Scheduler error: {e}")
-            time.sleep(60)
-
-def iniciar_scheduler():
-    thread = threading.Thread(target=scheduler, daemon=True)
-    thread.start()
-    logger.info("✅ Scheduler iniciado")
+        return False, f"Error: {str(e)}"
 
 # ==================== ENDPOINTS ====================
 
@@ -491,7 +190,10 @@ def index():
 
 @app.route('/hora')
 def get_time():
-    return format_timestamp(get_cuba_time())
+    username = request.remote_addr
+    hora_str = format_timestamp(get_cuba_time())
+    log_access(username, '/hora', f'Hora consultada: {hora_str}')
+    return hora_str
 
 @app.route('/lastupdatekilo')
 def get_version():
@@ -504,87 +206,295 @@ def get_version():
     except Exception as e:
         return f"Error: {str(e)}", 400
 
+@app.route('/datos', methods=['GET'])
+def obtener_datos():
+    username = request.remote_addr
+    log_access(username, '/datos', 'Datos consultados')
+    return jsonify(datos_actuales)
+
+@app.route('/actualizar', methods=['POST'])
+def actualizar_datos():
+    global datos_actuales
+    username = request.remote_addr
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No se recibieron datos"}), 400
+        
+        cambios = []
+        if 'dia' in data and data['dia'] != datos_actuales['dia']:
+            datos_actuales['dia'] = data['dia']
+            cambios.append(f"dia: {data['dia']}")
+        if 'noche' in data and data['noche'] != datos_actuales['noche']:
+            datos_actuales['noche'] = data['noche']
+            cambios.append(f"noche: {data['noche']}")
+        
+        if cambios:
+            log_access(username, '/actualizar', f'Datos actualizados: {", ".join(cambios)}')
+            send_telegram_message(f"📊 <b>Datos actualizados</b>\n\n{chr(10).join(cambios)}\n<b>Usuario:</b> {username}")
+        else:
+            log_access(username, '/actualizar', 'Solicitud sin cambios')
+        
+        return jsonify({"mensaje": "Datos actualizados correctamente", "datos": datos_actuales}), 200
+    except Exception as e:
+        log_access(username, '/actualizar', f'Error: {str(e)}')
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/sincronizar', methods=['POST'])
+def sincronizar():
+    global datos_actuales
+    username = request.remote_addr
+    try:
+        data = request.get_json()
+        cambios = []
+        if data:
+            if 'dia' in data and data['dia'] != datos_actuales['dia']:
+                datos_actuales['dia'] = data['dia']
+                cambios.append(f"dia: {data['dia']}")
+            if 'noche' in data and data['noche'] != datos_actuales['noche']:
+                datos_actuales['noche'] = data['noche']
+                cambios.append(f"noche: {data['noche']}")
+        
+        if cambios:
+            log_access(username, '/sincronizar', f'Sincronización: {", ".join(cambios)}')
+        else:
+            log_access(username, '/sincronizar', 'Sincronización sin cambios')
+        
+        return jsonify({"mensaje": "Sincronización completada", "datos": datos_actuales}), 200
+    except Exception as e:
+        log_access(username, '/sincronizar', f'Error: {str(e)}')
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     username = request.remote_addr
     
     if 'archivo' not in request.files:
+        log_access(username, '/upload', 'attempted upload (no file part)')
         return "Error: El campo debe llamarse 'archivo'", 400
     
     file = request.files['archivo']
     if file.filename == '':
+        log_access(username, '/upload', 'attempted upload (empty filename)')
         return "Error: Nombre de archivo vacío", 400
     
     filename = file.filename.replace("controlantimermaxd", "")
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    is_valid, message = validate_filename(filename)
     
+    if not is_valid:
+        log_access(username, '/upload', f'attempted upload (invalid filename: {message})')
+        send_telegram_message(f"❌ <b>Error en subida</b>\n\n<b>Usuario:</b> {username}\n<b>Archivo:</b> {filename}\n<b>Error:</b> {message}")
+        return f"Error: {message}", 205
+    
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
     if os.path.exists(file_path):
         os.remove(file_path)
     file.save(file_path)
     
     timestamp = format_timestamp(get_cuba_time())
+    with get_db() as conn:
+        conn.execute('INSERT OR REPLACE INTO uploads (filename, timestamp) VALUES (?, ?)', (filename, timestamp))
+        conn.commit()
+    
+    log_access(username, '/upload', f'Lista agregada correctamente: {filename}')
     
     try:
-        with get_db() as conn:
-            conn.execute('INSERT OR REPLACE INTO uploads (filename, timestamp) VALUES (?, ?)', (filename, timestamp))
-            conn.commit()
-    except Exception as e:
-        logger.error(f"Error guardando en BD: {e}")
+        parts = filename.split('-')
+        apodo = parts[0]
+        turno = parts[4].capitalize()
+        caption = f"📋 <b>Nueva Lista Subida</b>\n\n<b>Archivo:</b> {filename}\n<b>Listero:</b> {apodo}\n<b>Turno:</b> {turno}\n<b>Usuario:</b> {username}\n<b>Hora:</b> {timestamp}"
+        send_telegram_document(file_path, caption)
+    except:
+        send_telegram_message(f"✅ <b>Lista subida</b>\n\nArchivo: {filename}\nHora: {timestamp}")
     
-    send_telegram_message(f"📋 <b>Lista subida</b>\n\nArchivo: {filename}\nHora: {timestamp}")
     return f"Lista agregada correctamente: {filename}", 200
 
 @app.route('/files', methods=['GET'])
 def list_files():
+    log_access("Banco", '/files', 'Listando archivos')
     try:
         files = os.listdir(UPLOAD_FOLDER)
         return jsonify({"Listas": files})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except:
+        return jsonify({"error": "Error al listar archivos"}), 500
 
 @app.route('/download/<filename>', methods=['GET'])
 def download_file(filename):
+    username = request.remote_addr
     file_path = os.path.join(UPLOAD_FOLDER, filename)
+    
     if not os.path.exists(file_path):
+        log_access(username, f'/download/{filename}', 'attempted download (file not found)')
         return "Archivo no encontrado", 404
+    
+    timestamp = format_timestamp(get_cuba_time())
+    with get_db() as conn:
+        conn.execute('INSERT INTO downloads (filename, timestamp) VALUES (?, ?)', (filename, timestamp))
+        conn.commit()
+    
+    log_access(username, f'/download/{filename}', f'Descargando lista: {filename}')
     return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=True)
 
-@app.route('/api/bote/<turno>', methods=['GET'])
-def api_bote(turno):
-    if turno not in ['Dia', 'Noche']:
-        return jsonify({'error': 'Turno debe ser Dia o Noche'}), 400
-    
-    fecha = get_cuba_time().strftime('%Y-%m-%d')
-    resultado = calcular_bote(turno, fecha)
-    
-    if resultado['exito']:
-        mensaje = f"📊 BOTE {turno}: {resultado['total_a_botar']}"
-        send_telegram_message(mensaje)
-    
-    return jsonify(resultado)
+# ==================== LISTEROS ====================
 
-@app.route('/api/bote/todos', methods=['GET'])
-def api_bote_todos():
-    fecha = get_cuba_time().strftime('%Y-%m-%d')
-    dia = calcular_bote('Dia', fecha)
-    noche = calcular_bote('Noche', fecha)
-    
-    mensaje = f"""📊 <b>RESUMEN DE BOTES</b>
-📅 {fecha}
+@app.route('/api/sync-listero', methods=['POST'])
+def sync_listero():
+    username = request.remote_addr
+    try:
+        data = request.get_json()
+        if not data or 'nombre' not in data:
+            return jsonify({'error': 'Datos incompletos'}), 400
+        
+        nombre = data['nombre']
+        timestamp = format_timestamp(get_cuba_time())
+        
+        with get_db() as conn:
+            conn.execute('INSERT OR REPLACE INTO listeros (nombre, config, ultima_sincronizacion) VALUES (?, ?, ?)',
+                        (nombre, json.dumps(data, ensure_ascii=False), timestamp))
+            conn.commit()
+        
+        with open(os.path.join(LISTEROS_FOLDER, f"{nombre}.json"), 'w', encoding='utf-8') as f:
+            json.dump({'nombre': nombre, 'timestamp': timestamp, 'data': data}, f, indent=2, ensure_ascii=False)
+        
+        log_access(username, '/api/sync-listero', f'Listero sincronizado: {nombre}')
+        return jsonify({'success': True, 'message': f'Listero {nombre} sincronizado', 'timestamp': timestamp})
+    except Exception as e:
+        log_access(username, '/api/sync-listero', f'Error: {str(e)}')
+        return jsonify({'error': str(e)}), 500
 
-🌅 <b>DIA:</b> ${dia['total_a_botar']:,.0f}
-📋 {dia['listeros']} listeros
+@app.route('/api/listeros-completos', methods=['GET'])
+def get_listeros_completos():
+    username = request.remote_addr
+    try:
+        with get_db() as conn:
+            rows = conn.execute('SELECT nombre, config, ultima_sincronizacion FROM listeros ORDER BY nombre').fetchall()
+            listeros = [{
+                'nombre': row['nombre'],
+                'ultima_sincronizacion': row['ultima_sincronizacion'],
+                'config': json.loads(row['config'])
+            } for row in rows]
+        
+        log_access(username, '/api/listeros-completos', f'Listando {len(listeros)} listeros')
+        return jsonify({'success': True, 'listeros': listeros})
+    except Exception as e:
+        log_access(username, '/api/listeros-completos', f'Error: {str(e)}')
+        return jsonify({'error': str(e)}), 500
 
-🌙 <b>NOCHE:</b> ${noche['total_a_botar']:,.0f}
-📋 {noche['listeros']} listeros"""
-    
-    send_telegram_message(mensaje)
-    
-    return jsonify({'dia': dia, 'noche': noche})
+@app.route('/api/listero/<nombre>', methods=['GET'])
+def get_listero_config(nombre):
+    username = request.remote_addr
+    try:
+        with get_db() as conn:
+            row = conn.execute('SELECT nombre, config, ultima_sincronizacion FROM listeros WHERE nombre = ?', (nombre,)).fetchone()
+            if row:
+                log_access(username, f'/api/listero/{nombre}', 'Configuración encontrada')
+                return jsonify({
+                    'nombre': row['nombre'],
+                    'ultima_sincronizacion': row['ultima_sincronizacion'],
+                    'config': json.loads(row['config'])
+                })
+        
+        archivo = os.path.join(LISTEROS_FOLDER, f"{nombre}.json")
+        if os.path.exists(archivo):
+            with open(archivo, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            log_access(username, f'/api/listero/{nombre}', 'Configuración encontrada en archivo')
+            return jsonify(data)
+        
+        log_access(username, f'/api/listero/{nombre}', 'Listero no encontrado')
+        return jsonify({'error': 'Listero no encontrado'}), 404
+    except Exception as e:
+        log_access(username, f'/api/listero/{nombre}', f'Error: {str(e)}')
+        return jsonify({'error': str(e)}), 500
 
-@app.route('/status')
-def get_status():
-    return status
+@app.route('/api/listeros/estadisticas', methods=['GET'])
+def get_listeros_stats():
+    username = request.remote_addr
+    try:
+        with get_db() as conn:
+            rows = conn.execute('SELECT ultima_sincronizacion FROM listeros').fetchall()
+        
+        total = len(rows)
+        hoy = get_cuba_time().strftime('%Y-%m-%d')
+        sincronizados_hoy = sum(1 for r in rows if hoy in r['ultima_sincronizacion'])
+        
+        log_access(username, '/api/listeros/estadisticas', 'Estadísticas calculadas')
+        return jsonify({
+            'success': True,
+            'estadisticas': {
+                'total_listeros': total,
+                'sincronizados_hoy': sincronizados_hoy,
+                'ultima_actualizacion': format_timestamp(get_cuba_time())
+            }
+        })
+    except Exception as e:
+        log_access(username, '/api/listeros/estadisticas', f'Error: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+# ==================== TIRADAS ====================
+
+@app.route('/api/tirada/<turno>', methods=['GET'])
+def get_tirada(turno):
+    username = request.remote_addr
+    tiradas = load_json_file(TIRADAS_FILE)
+    log_access(username, f'/api/tirada/{turno}', 'Tirada obtenida')
+    return jsonify({'turno': turno, 'tirada': tiradas.get(turno, '0-00-00-00')})
+
+@app.route('/api/tirada/<turno>', methods=['POST'])
+def set_tirada(turno):
+    username = request.remote_addr
+    try:
+        data = request.get_json()
+        if not data or 'tirada' not in data:
+            return jsonify({'error': 'Formato incorrecto'}), 400
+        
+        tiradas = load_json_file(TIRADAS_FILE)
+        tiradas[turno] = data['tirada']
+        save_json_file(TIRADAS_FILE, tiradas)
+        
+        log_access(username, f'/api/tirada/{turno}', f'Tirada guardada: {data["tirada"]}')
+        return jsonify({'mensaje': 'Tirada guardada', 'turno': turno, 'tirada': data['tirada']})
+    except Exception as e:
+        log_access(username, f'/api/tirada/{turno}', f'Error: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tiradas/all', methods=['GET'])
+@auth.login_required
+def get_all_tiradas():
+    username = auth.current_user()
+    tiradas = load_json_file(TIRADAS_FILE)
+    log_access(username, '/api/tiradas/all', 'Enviando todas las tiradas')
+    return jsonify(tiradas)
+
+@app.route('/api/tiradas/all', methods=['POST'])
+@auth.login_required
+def set_all_tiradas():
+    username = auth.current_user()
+    data = request.get_json()
+    if data is None:
+        return jsonify({'error': 'No data'}), 400
+    save_json_file(TIRADAS_FILE, data)
+    log_access(username, '/api/tiradas/all', 'Tiradas actualizadas')
+    return jsonify({'success': True})
+
+@app.route('/api/config', methods=['GET'])
+@auth.login_required
+def get_config():
+    username = auth.current_user()
+    config = load_json_file(CONFIG_FILE)
+    log_access(username, '/api/config', 'Configuración enviada')
+    return jsonify(config)
+
+@app.route('/api/config', methods=['POST'])
+@auth.login_required
+def set_config():
+    username = auth.current_user()
+    data = request.get_json()
+    if data is None:
+        return jsonify({'error': 'No data'}), 400
+    save_json_file(CONFIG_FILE, data)
+    log_access(username, '/api/config', 'Configuración actualizada')
+    return jsonify({'success': True})
 
 # ==================== ERROR HANDLERS ====================
 
@@ -596,13 +506,19 @@ def not_found(error):
 def internal_error(error):
     return jsonify({"status": "error", "message": "Internal server error"}), 500
 
-# ==================== MAIN ====================
+# ==================== INIT ====================
 
 def initialize_services():
     init_database()
-    iniciar_scheduler()
+    
+    for file in [TIRADAS_FILE, CONFIG_FILE]:
+        if not os.path.exists(file):
+            save_json_file(file, {})
+    
     timestamp = format_timestamp(get_cuba_time())
-    logger.info(f"✅ Servidor iniciado: {timestamp}")
-    send_telegram_message(f"🚀 <b>Servidor Iniciado con desencriptación B4A</b>\n\nHora: {timestamp}")
+    logger.info(f"{timestamp} - Servidor iniciado. Estado: {status}")
+    
+    send_telegram_message(f"🚀 <b>Servidor Iniciado</b>\n\n<b>Estado:</b> {status}\n<b>Hora:</b> {timestamp}")
 
 initialize_services()
+ç
