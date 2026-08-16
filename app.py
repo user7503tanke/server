@@ -521,4 +521,3 @@ def initialize_services():
     send_telegram_message(f"🚀 <b>Servidor Iniciado</b>\n\n<b>Estado:</b> {status}\n<b>Hora:</b> {timestamp}")
 
 initialize_services()
-ç
